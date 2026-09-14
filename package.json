@@ -1,4 +1,4 @@
-{
+a{
   "name": "my-whiteboard",
   "version": "1.0.0",
   "description": "Offline Digital Whiteboard App",
@@ -12,4 +12,4 @@
     "@capacitor/core": "^6.0.0"
   }
 }
-w
+
