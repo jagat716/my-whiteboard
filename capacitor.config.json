@@ -1,9 +1,8 @@
 {
   "appId": "com.mywhiteboard.app",
   "appName": "My Whiteboard",
-  "webDir": ".",
+  "webDir": "www",
   "server": {
     "androidScheme": "https"
   }
 }
-
