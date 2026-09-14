@@ -3,6 +3,9 @@ name: Build Android App
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,6 +24,12 @@ jobs:
         with:
           distribution: 'zulu'
           java-version: '17'
+
+      - name: Prepare Assets Folder
+        run: |
+          mkdir -p www
+          cp index.html www/ 2>/dev/null || true
+          cp -r * www/ 2>/dev/null || true
 
       - name: Install Dependencies & Add Android
         run: |
@@ -48,4 +57,3 @@ jobs:
         with:
           name: Whiteboard-PlayStore-AAB
           path: android/app/build/outputs/bundle/release/app-release.aab
-
