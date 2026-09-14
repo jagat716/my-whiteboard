@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>CanvasPad Pro - Compact Pen Dock Edition</title>
+  <title>CanvasPad Pro - Image Import & Clean UI Edition</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -273,9 +273,13 @@
     <button class="btn btn-icon" id="clear-btn">↺</button>
   </div>
 
-  <!-- Top Right: Export & BG -->
+  <!-- Top Right: Export, Image & BG -->
   <div class="bar" id="top-right">
     <div class="drag-handle" title="Drag me">⋮⋮</div>
+    <!-- Image Import Button -->
+    <button class="btn" id="import-img-btn">📷 Image</button>
+    <input type="file" id="image-input" accept="image/*" style="display: none;">
+
     <button class="btn" id="bg-btn">Grid</button>
     <button class="btn" id="export-btn" style="background: #10b981; color: white;">Export ▾</button>
   </div>
@@ -434,6 +438,16 @@
 
     function renderItem(ctx, item) {
       ctx.save();
+
+      // Handling Imported Image Items
+      if (item.type === 'image') {
+        if (item.imgElement && item.imgElement.complete) {
+          ctx.drawImage(item.imgElement, item.x, item.y, item.w, item.h);
+        }
+        ctx.restore();
+        return;
+      }
+
       ctx.beginPath();
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -496,7 +510,12 @@
       page.items = page.items.filter(item => {
         const threshold = (item.size / 2) + radius;
 
-        if (item.points) {
+        if (item.type === 'image') {
+          // Object eraser removes image if tapped within its bounding box
+          if (x >= item.x && x <= item.x + item.w && y >= item.y && y <= item.y + item.h) {
+            return false;
+          }
+        } else if (item.points) {
           for (let i = 0; i < item.points.length - 1; i++) {
             if (distToSegment({ x, y }, item.points[i], item.points[i + 1]) <= threshold) return false;
           }
@@ -520,7 +539,7 @@
       }
     }
 
-    // Canvas Drawing
+    // Canvas Pointer Drawing
     const container = document.getElementById('canvas-container');
 
     container.addEventListener('pointerdown', (e) => {
@@ -614,7 +633,7 @@
     container.addEventListener('pointerup', finishAction);
     container.addEventListener('pointercancel', finishAction);
 
-    // Draggable Implementation
+    // Draggable Toolbars
     function makeElementDraggable(elm, handleSelector) {
       let isDragging = false;
       let startX, startY, origLeft, origTop;
@@ -770,7 +789,6 @@
       }
     };
 
-    // Compact Popups for Color & Size
     colorTrigger.onclick = (e) => {
       e.stopPropagation();
       const isShown = colorPopup.classList.contains('show');
@@ -849,6 +867,60 @@
       const previewDiameter = Math.min(14, Math.max(4, brushSize));
       sizePreviewDot.style.width = previewDiameter + 'px';
       sizePreviewDot.style.height = previewDiameter + 'px';
+    });
+
+    // ==========================================
+    // IMAGE IMPORT FUNCTIONALITY
+    // ==========================================
+    const importImgBtn = document.getElementById('import-img-btn');
+    const imageInput = document.getElementById('image-input');
+
+    importImgBtn.onclick = () => imageInput.click();
+
+    imageInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          // Scale image nicely to fit canvas viewport without overflowing
+          const maxW = window.innerWidth * 0.65;
+          const maxH = window.innerHeight * 0.65;
+          let w = img.width;
+          let h = img.height;
+
+          if (w > maxW) {
+            h = (maxW / w) * h;
+            w = maxW;
+          }
+          if (h > maxH) {
+            w = (maxH / h) * w;
+            h = maxH;
+          }
+
+          // Center on screen
+          const x = (window.innerWidth - w) / 2;
+          const y = (window.innerHeight - h) / 2;
+
+          const imgItem = {
+            type: 'image',
+            imgElement: img,
+            x: x,
+            y: y,
+            w: w,
+            h: h
+          };
+
+          pages[currentPageIndex].items.push(imgItem);
+          pages[currentPageIndex].redoStack = [];
+          redrawPage();
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+      imageInput.value = ''; // Reset for re-uploading identical file if needed
     });
 
     // Undo / Redo / Clear
