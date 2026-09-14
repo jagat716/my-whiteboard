@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>CanvasPad Pro - Image Import & Clean UI Edition</title>
+  <title>CanvasPad Pro - Color Grid Edition</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-    body {
+    html, body {
+      width: 100%;
+      height: 100%;
       overflow: hidden;
-      width: 100vw;
-      height: 100vh;
-      background: #f8fafc;
+      background: #ffffff;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       user-select: none;
       -webkit-user-select: none;
@@ -20,22 +20,37 @@
     #canvas-container {
       position: absolute;
       top: 0; left: 0;
-      width: 100%; height: 100%;
+      width: 100vw; height: 100vh;
       touch-action: none;
     }
     canvas {
       position: absolute;
       top: 0; left: 0;
-      width: 100%; height: 100%;
+      width: 100vw; height: 100vh;
+      display: block;
     }
     #bg-canvas { z-index: 1; }
-    #main-canvas { z-index: 2; }
-    #draw-canvas { z-index: 3; }
+    #image-canvas { z-index: 2; }
+    #main-canvas { z-index: 3; }
+    #draw-canvas { z-index: 4; }
 
-    /* Draggable Floating Bars */
+    /* Custom Live Pen Target Pointer */
+    #pen-pointer {
+      position: absolute;
+      pointer-events: none;
+      border-radius: 50%;
+      border: 1.5px solid rgba(79, 70, 229, 0.7);
+      background: rgba(79, 70, 229, 0.15);
+      transform: translate(-50%, -50%);
+      z-index: 40;
+      display: none;
+      transition: width 0.05s ease, height 0.05s ease;
+    }
+
+    /* Draggable Bars */
     .bar {
       position: fixed;
-      z-index: 10;
+      z-index: 20;
       background: rgba(255, 255, 255, 0.94);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
@@ -49,7 +64,6 @@
       transition: opacity 0.25s ease, transform 0.25s ease;
     }
 
-    /* Handle for Dragging */
     .drag-handle {
       cursor: grab;
       color: #94a3b8;
@@ -62,12 +76,10 @@
       touch-action: none;
       border-radius: 8px;
     }
-    .drag-handle:hover { background: #f1f5f9; }
     .drag-handle:active { cursor: grabbing; background: #e2e8f0; }
 
-    /* Positions */
     #top-left { top: 16px; left: 16px; }
-    #top-mid { top: 16px; left: calc(50vw - 75px); }
+    #top-mid { top: 16px; left: calc(50vw - 80px); }
     #top-right { top: 16px; right: 16px; }
     #bottom-dock {
       bottom: 20px;
@@ -76,9 +88,11 @@
       padding: 4px 8px;
       gap: 4px;
       border-radius: 24px;
+      max-width: 96vw;
+      overflow-x: auto;
     }
 
-    /* Master Clean Toggle Button */
+    /* Master Clean Mode Button */
     #toggle-ui-btn {
       position: fixed;
       top: 16px;
@@ -136,21 +150,16 @@
     }
     .btn-icon { padding: 8px 10px; font-size: 16px; }
 
-    /* Compact Active Color Trigger Dot */
     #color-trigger {
-      width: 28px;
-      height: 28px;
+      width: 28px; height: 28px;
       border-radius: 50%;
       cursor: pointer;
       border: 2px solid #ffffff;
       box-shadow: 0 0 0 1.5px #94a3b8;
       display: inline-block;
-      transition: transform 0.15s ease;
       flex-shrink: 0;
     }
-    #color-trigger:active { transform: scale(0.9); }
 
-    /* Compact Active Size Trigger Pill */
     #size-trigger {
       background: #f1f5f9;
       border-radius: 14px;
@@ -163,17 +172,14 @@
       font-weight: 700;
       color: #475569;
     }
-    #size-trigger:hover { background: #e2e8f0; }
     #size-trigger-preview {
-      width: 8px;
-      height: 8px;
+      width: 8px; height: 8px;
       border-radius: 50%;
       background: #475569;
-      display: inline-block;
     }
 
     .color-dot {
-      width: 26px; height: 26px;
+      width: 28px; height: 28px;
       border-radius: 50%;
       cursor: pointer;
       border: 2px solid #ffffff;
@@ -186,7 +192,6 @@
       box-shadow: 0 0 0 2px #4f46e5;
     }
 
-    /* Sub-popups */
     .sub-popup {
       display: none;
       position: fixed;
@@ -200,25 +205,46 @@
     }
     .sub-popup.show { display: flex; }
 
+    /* Expanded 2-Row Color Grid */
     #color-popup {
-      flex-direction: row;
-      align-items: center;
-      gap: 8px;
-    }
-
-    #size-popup {
       flex-direction: column;
-      align-items: center;
       gap: 8px;
-      min-width: 140px;
+      padding: 10px;
+      width: 220px;
+    }
+    .color-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+      justify-items: center;
+    }
+    .custom-color-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid #f1f5f9;
+      padding-top: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+    }
+    input[type="color"] {
+      -webkit-appearance: none;
+      border: none;
+      width: 32px;
+      height: 30px;
+      border-radius: 8px;
+      cursor: pointer;
+      background: transparent;
+    }
+    input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+    input[type="color"]::-webkit-color-swatch {
+      border: 1.5px solid #cbd5e1;
+      border-radius: 8px;
     }
 
-    #size-popup input[type="range"] {
-      width: 120px;
-      accent-color: #4f46e5;
-      cursor: pointer;
-      touch-action: auto;
-    }
+    #size-popup { flex-direction: column; align-items: center; gap: 8px; min-width: 140px; }
+    #size-popup input[type="range"] { width: 120px; accent-color: #4f46e5; cursor: pointer; }
 
     .popup-btn {
       padding: 8px 12px;
@@ -236,23 +262,15 @@
       white-space: nowrap;
     }
     .popup-btn:active { background: #f1f5f9; }
-    .popup-btn.selected {
-      background: #ede9fe;
-      color: #4f46e5;
-    }
+    .popup-btn.selected { background: #ede9fe; color: #4f46e5; }
 
-    .divider {
-      width: 1px;
-      height: 20px;
-      background: #e2e8f0;
-      margin: 0 2px;
-    }
+    .divider { width: 1px; height: 20px; background: #e2e8f0; margin: 0 2px; }
   </style>
 </head>
 <body>
 
-  <!-- Clean Canvas Master Button -->
   <button id="toggle-ui-btn" title="Toggle Clean Mode">👁</button>
+  <div id="pen-pointer"></div>
 
   <!-- Top Left: Pages -->
   <div class="bar" id="top-left">
@@ -265,7 +283,7 @@
     <button class="btn btn-icon" id="del-page" style="color: #ef4444;">🗑</button>
   </div>
 
-  <!-- Top Center: History -->
+  <!-- Top Mid: History -->
   <div class="bar" id="top-mid">
     <div class="drag-handle" title="Drag me">⋮⋮</div>
     <button class="btn btn-icon" id="undo-btn">↶</button>
@@ -273,89 +291,87 @@
     <button class="btn btn-icon" id="clear-btn">↺</button>
   </div>
 
-  <!-- Top Right: Export, Image & BG -->
+  <!-- Top Right: Image, BG, Export -->
   <div class="bar" id="top-right">
     <div class="drag-handle" title="Drag me">⋮⋮</div>
-    <!-- Image Import Button -->
     <button class="btn" id="import-img-btn">📷 Image</button>
     <input type="file" id="image-input" accept="image/*" style="display: none;">
-
-    <button class="btn" id="bg-btn">Grid</button>
+    <button class="btn" id="bg-btn">Ruled</button>
     <button class="btn" id="export-btn" style="background: #10b981; color: white;">Export ▾</button>
   </div>
 
   <!-- Export Popup -->
   <div id="export-popup" class="sub-popup" style="flex-direction: column;">
-    <button class="popup-btn" id="opt-export-png">
-      <span>🖼</span> Save Current Page (PNG)
-    </button>
-    <button class="popup-btn" id="opt-export-pdf">
-      <span>📄</span> Export All Pages (PDF)
-    </button>
+    <button class="popup-btn" id="opt-export-png"><span>🖼</span> Save Current Page (PNG)</button>
+    <button class="popup-btn" id="opt-export-pdf"><span>📄</span> Export All Pages (PDF)</button>
   </div>
 
   <!-- Eraser Popup -->
   <div id="eraser-popup" class="sub-popup" style="flex-direction: column;">
-    <button class="popup-btn selected" id="opt-pixel-eraser">
-      <span>✏️</span> Pixel Eraser
-    </button>
-    <button class="popup-btn" id="opt-stroke-eraser">
-      <span>🪄</span> Object Eraser
-    </button>
+    <button class="popup-btn" id="opt-pixel-eraser"><span>✏️</span> Pixel Eraser</button>
+    <button class="popup-btn selected" id="opt-stroke-eraser"><span>🪄</span> Object Eraser</button>
   </div>
 
   <!-- Shapes Popup -->
   <div id="shapes-popup" class="sub-popup" style="flex-direction: column;">
-    <button class="popup-btn selected" data-shape="line">
-      <span>📏</span> Line
-    </button>
-    <button class="popup-btn" data-shape="rect">
-      <span>▭</span> Rectangle
-    </button>
-    <button class="popup-btn" data-shape="circle">
-      <span>◯</span> Circle
-    </button>
+    <button class="popup-btn selected" data-shape="line"><span>📏</span> Line</button>
+    <button class="popup-btn" data-shape="rect"><span>▭</span> Rectangle</button>
+    <button class="popup-btn" data-shape="circle"><span>◯</span> Circle</button>
   </div>
 
-  <!-- Compact Color Selection Popup -->
+  <!-- Expanded Color Grid Popup with White & Custom Picker -->
   <div id="color-popup" class="sub-popup">
-    <div class="color-dot active" data-color="#1e293b" style="background: #1e293b;"></div>
-    <div class="color-dot" data-color="#3b82f6" style="background: #3b82f6;"></div>
-    <div class="color-dot" data-color="#ef4444" style="background: #ef4444;"></div>
-    <div class="color-dot" data-color="#10b981" style="background: #10b981;"></div>
-    <div class="color-dot" data-color="#f59e0b" style="background: #f59e0b;"></div>
-    <div class="color-dot" data-color="#8b5cf6" style="background: #8b5cf6;"></div>
+    <div class="color-grid">
+      <!-- White Dot with subtle border for Dark mode -->
+      <div class="color-dot" data-color="#ffffff" title="White (Dark Mode)" style="background: #ffffff; border: 2px solid #cbd5e1;"></div>
+      <div class="color-dot active" data-color="#1e293b" title="Charcoal Black" style="background: #1e293b;"></div>
+      <div class="color-dot" data-color="#3b82f6" title="Blue" style="background: #3b82f6;"></div>
+      <div class="color-dot" data-color="#06b6d4" title="Cyan / Sky" style="background: #06b6d4;"></div>
+      <div class="color-dot" data-color="#10b981" title="Green" style="background: #10b981;"></div>
+      <div class="color-dot" data-color="#84cc16" title="Lime" style="background: #84cc16;"></div>
+
+      <div class="color-dot" data-color="#eab308" title="Yellow" style="background: #eab308;"></div>
+      <div class="color-dot" data-color="#f97316" title="Orange" style="background: #f97316;"></div>
+      <div class="color-dot" data-color="#ef4444" title="Red" style="background: #ef4444;"></div>
+      <div class="color-dot" data-color="#ec4899" title="Pink" style="background: #ec4899;"></div>
+      <div class="color-dot" data-color="#8b5cf6" title="Purple" style="background: #8b5cf6;"></div>
+      <div class="color-dot" data-color="#64748b" title="Slate Gray" style="background: #64748b;"></div>
+    </div>
+    <div class="custom-color-row">
+      <span>Custom Palette</span>
+      <input type="color" id="custom-color-input" value="#1e293b" title="Choose any custom color">
+    </div>
   </div>
 
-  <!-- Compact Stroke Size Popup -->
+  <!-- Size Popup -->
   <div id="size-popup" class="sub-popup">
     <div style="font-size: 11px; font-weight: 700; color: #64748b;">STROKE THICKNESS: <span id="size-val">6</span>px</div>
     <input type="range" id="brush-size" min="2" max="60" value="6">
   </div>
 
-  <!-- Compact Bottom Dock -->
+  <!-- Bottom Dock -->
   <div class="bar" id="bottom-dock">
     <div class="drag-handle" title="Drag me">⋮⋮</div>
+    <button class="btn" id="tool-select">✋ Select</button>
     <button class="btn active" id="tool-pen">Pen</button>
     <button class="btn" id="tool-highlighter">Highlight</button>
-    <button class="btn" id="tool-eraser">Eraser</button>
+    <button class="btn" id="tool-eraser">Eraser (Obj)</button>
     <button class="btn" id="tool-shape">Shapes ▾</button>
+    <button class="btn" id="tool-laser">🔴 Laser</button>
 
     <div class="divider"></div>
 
-    <!-- Active Color Dot Indicator & Picker -->
     <div id="color-trigger" title="Change Color" style="background: #1e293b;"></div>
-
-    <!-- Compact Size Quick Pill -->
     <div id="size-trigger" title="Change Size">
       <div id="size-trigger-preview"></div>
       <span id="size-trigger-text">6</span>
     </div>
   </div>
 
-  <!-- Canvas Hierarchy -->
+  <!-- Multi-Layer Canvas Architecture -->
   <div id="canvas-container">
     <canvas id="bg-canvas"></canvas>
+    <canvas id="image-canvas"></canvas>
     <canvas id="main-canvas"></canvas>
     <canvas id="draw-canvas"></canvas>
   </div>
@@ -363,31 +379,37 @@
   <script>
     const bgCanvas = document.getElementById('bg-canvas');
     const bgCtx = bgCanvas.getContext('2d');
+    const imgCanvas = document.getElementById('image-canvas');
+    const imgCtx = imgCanvas.getContext('2d');
     const mainCanvas = document.getElementById('main-canvas');
     const mainCtx = mainCanvas.getContext('2d');
     const drawCanvas = document.getElementById('draw-canvas');
     const drawCtx = drawCanvas.getContext('2d');
 
+    const penPointer = document.getElementById('pen-pointer');
+
     let currentTool = 'pen';
     let currentShape = 'line';
-    let eraserMode = 'pixel';
+    let eraserMode = 'object';
     let currentColor = '#1e293b';
     let brushSize = 6;
-    let bgMode = 'grid';
+    let bgMode = 'ruled';
 
-    let pages = [ { items: [], redoStack: [] } ];
+    let pages = [ { strokes: [], images: [], redoStack: [] } ];
     let currentPageIndex = 0;
+    let selectedImageIndex = -1;
     let isDrawing = false;
-    let activeItem = null;
+    let activeStroke = null;
+    let imgDragState = null;
 
     function resize() {
       const dpr = window.devicePixelRatio || 1;
       const w = window.innerWidth;
       const h = window.innerHeight;
 
-      [bgCanvas, mainCanvas, drawCanvas].forEach(c => {
-        c.width = w * dpr;
-        c.height = h * dpr;
+      [bgCanvas, imgCanvas, mainCanvas, drawCanvas].forEach(c => {
+        c.width = Math.floor(w * dpr);
+        c.height = Math.floor(h * dpr);
         c.style.width = w + 'px';
         c.style.height = h + 'px';
         const ctx = c.getContext('2d');
@@ -396,9 +418,10 @@
       });
 
       renderBackground();
-      redrawPage();
+      redrawAll();
     }
     window.addEventListener('resize', resize);
+    window.addEventListener('orientationchange', () => setTimeout(resize, 150));
 
     function renderBackground(targetCtx = bgCtx, targetW = window.innerWidth, targetH = window.innerHeight) {
       targetCtx.clearRect(0, 0, targetW, targetH);
@@ -412,8 +435,18 @@
       targetCtx.fillStyle = '#ffffff';
       targetCtx.fillRect(0, 0, targetW, targetH);
 
-      if (bgMode === 'grid') {
+      if (bgMode === 'ruled') {
         targetCtx.strokeStyle = '#e2e8f0';
+        targetCtx.lineWidth = 1.2;
+        const step = 34;
+        targetCtx.beginPath();
+        for (let y = step; y <= targetH; y += step) {
+          targetCtx.moveTo(0, y);
+          targetCtx.lineTo(targetW, y);
+        }
+        targetCtx.stroke();
+      } else if (bgMode === 'grid') {
+        targetCtx.strokeStyle = '#f1f5f9';
         targetCtx.lineWidth = 1;
         const step = 28;
         targetCtx.beginPath();
@@ -424,30 +457,51 @@
           targetCtx.moveTo(0, y); targetCtx.lineTo(targetW, y);
         }
         targetCtx.stroke();
-      } else if (bgMode === 'ruled') {
-        targetCtx.strokeStyle = '#e2e8f0';
-        targetCtx.lineWidth = 1.2;
-        const step = 34;
-        targetCtx.beginPath();
-        for (let y = step; y <= targetH; y += step) {
-          targetCtx.moveTo(0, y); targetCtx.lineTo(targetW, y);
-        }
-        targetCtx.stroke();
       }
     }
 
-    function renderItem(ctx, item) {
-      ctx.save();
+    function renderImages(targetCtx = imgCtx, isExporting = false) {
+      targetCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      const page = pages[currentPageIndex];
 
-      // Handling Imported Image Items
-      if (item.type === 'image') {
-        if (item.imgElement && item.imgElement.complete) {
-          ctx.drawImage(item.imgElement, item.x, item.y, item.w, item.h);
+      page.images.forEach((imgItem, idx) => {
+        if (imgItem.element && imgItem.element.complete) {
+          targetCtx.drawImage(imgItem.element, imgItem.x, imgItem.y, imgItem.w, imgItem.h);
+
+          if (idx === selectedImageIndex && !isExporting) {
+            targetCtx.save();
+            targetCtx.strokeStyle = '#4f46e5';
+            targetCtx.lineWidth = 2;
+            targetCtx.strokeRect(imgItem.x, imgItem.y, imgItem.w, imgItem.h);
+
+            // Resize handle
+            targetCtx.fillStyle = '#ffffff';
+            targetCtx.strokeStyle = '#4f46e5';
+            targetCtx.lineWidth = 2.5;
+            targetCtx.beginPath();
+            targetCtx.arc(imgItem.x + imgItem.w, imgItem.y + imgItem.h, 9, 0, Math.PI * 2);
+            targetCtx.fill();
+            targetCtx.stroke();
+
+            // Delete badge
+            targetCtx.fillStyle = '#ef4444';
+            targetCtx.beginPath();
+            targetCtx.arc(imgItem.x + imgItem.w, imgItem.y, 11, 0, Math.PI * 2);
+            targetCtx.fill();
+            targetCtx.fillStyle = '#ffffff';
+            targetCtx.font = 'bold 12px sans-serif';
+            targetCtx.textAlign = 'center';
+            targetCtx.textBaseline = 'middle';
+            targetCtx.fillText('✕', imgItem.x + imgItem.w, imgItem.y);
+
+            targetCtx.restore();
+          }
         }
-        ctx.restore();
-        return;
-      }
+      });
+    }
 
+    function renderStroke(ctx, item) {
+      ctx.save();
       ctx.beginPath();
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -489,33 +543,31 @@
       ctx.restore();
     }
 
-    function redrawPage() {
+    function redrawStrokes() {
       mainCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
       const page = pages[currentPageIndex];
-      page.items.forEach(item => renderItem(mainCtx, item));
+      page.strokes.forEach(s => renderStroke(mainCtx, s));
+    }
+
+    function redrawAll() {
+      renderImages();
+      redrawStrokes();
     }
 
     function distToSegment(p, v, w) {
       const l2 = (w.x - v.x) ** 2 + (w.y - v.y) ** 2;
       if (l2 === 0) return Math.hypot(p.x - v.x, p.y - v.y);
-      let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
-      t = Math.max(0, Math.min(1, t));
+      let t = Math.max(0, Math.min(1, ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2));
       return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
     }
 
-    function removeItemsAtPoint(x, y, radius) {
+    function eraseStrokesAtPoint(x, y, radius) {
       const page = pages[currentPageIndex];
-      const initialCount = page.items.length;
+      const initialCount = page.strokes.length;
 
-      page.items = page.items.filter(item => {
+      page.strokes = page.strokes.filter(item => {
         const threshold = (item.size / 2) + radius;
-
-        if (item.type === 'image') {
-          // Object eraser removes image if tapped within its bounding box
-          if (x >= item.x && x <= item.x + item.w && y >= item.y && y <= item.y + item.h) {
-            return false;
-          }
-        } else if (item.points) {
+        if (item.points) {
           for (let i = 0; i < item.points.length - 1; i++) {
             if (distToSegment({ x, y }, item.points[i], item.points[i + 1]) <= threshold) return false;
           }
@@ -533,41 +585,178 @@
         return true;
       });
 
-      if (page.items.length !== initialCount) {
+      if (page.strokes.length !== initialCount) {
         page.redoStack = [];
-        redrawPage();
+        redrawStrokes();
       }
     }
 
-    // Canvas Pointer Drawing
+    function updatePenPointer(x, y) {
+      if (currentTool === 'pen' || currentTool === 'highlighter' || currentTool === 'eraser' || currentTool === 'laser') {
+        penPointer.style.display = 'block';
+        penPointer.style.left = x + 'px';
+        penPointer.style.top = y + 'px';
+
+        if (currentTool === 'laser') {
+          penPointer.style.width = '14px';
+          penPointer.style.height = '14px';
+          penPointer.style.borderColor = '#ef4444';
+          penPointer.style.background = '#ef4444';
+          penPointer.style.boxShadow = '0 0 12px 2px rgba(239, 68, 68, 0.9)';
+        } else {
+          const sz = (currentTool === 'highlighter') ? Math.max(brushSize * 2.2, 24) : brushSize;
+          penPointer.style.width = Math.max(sz, 8) + 'px';
+          penPointer.style.height = Math.max(sz, 8) + 'px';
+          penPointer.style.borderColor = (currentTool === 'eraser') ? '#94a3b8' : (currentColor === '#ffffff' ? '#94a3b8' : currentColor);
+          penPointer.style.background = (currentTool === 'eraser') ? 'rgba(148, 163, 184, 0.25)' : (currentColor === '#ffffff' ? 'rgba(255,255,255,0.4)' : currentColor + '22');
+          penPointer.style.boxShadow = 'none';
+        }
+      } else {
+        penPointer.style.display = 'none';
+      }
+    }
+
     const container = document.getElementById('canvas-container');
 
-    container.addEventListener('pointerdown', (e) => {
+    container.addEventListener('pointermove', (e) => {
+      updatePenPointer(e.clientX, e.clientY);
+
+      if (imgDragState) {
+        e.preventDefault();
+        const page = pages[currentPageIndex];
+        const img = page.images[selectedImageIndex];
+        if (!img) return;
+
+        const dx = e.clientX - imgDragState.startX;
+        const dy = e.clientY - imgDragState.startY;
+
+        if (imgDragState.mode === 'move') {
+          img.x = imgDragState.origX + dx;
+          img.y = imgDragState.origY + dy;
+        } else if (imgDragState.mode === 'resize') {
+          const newW = Math.max(60, imgDragState.origW + dx);
+          const ratio = imgDragState.origH / imgDragState.origW;
+          img.w = newW;
+          img.h = newW * ratio;
+        }
+        renderImages();
+        return;
+      }
+
+      if (!isDrawing) return;
       e.preventDefault();
-      closeAllPopups();
-      isDrawing = true;
       const x = e.clientX;
       const y = e.clientY;
 
+      if (currentTool === 'laser') {
+        drawCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+        drawCtx.beginPath();
+        drawCtx.arc(x, y, 6, 0, Math.PI * 2);
+        drawCtx.fillStyle = '#ef4444';
+        drawCtx.shadowColor = '#ef4444';
+        drawCtx.shadowBlur = 10;
+        drawCtx.fill();
+        return;
+      }
+
       if (currentTool === 'eraser' && eraserMode === 'object') {
-        removeItemsAtPoint(x, y, brushSize / 2);
+        eraseStrokesAtPoint(x, y, brushSize / 2);
         return;
       }
 
       if (currentTool === 'shape') {
-        activeItem = {
+        activeStroke.endX = x;
+        activeStroke.endY = y;
+        drawCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+        renderStroke(drawCtx, activeStroke);
+      } else {
+        activeStroke.points.push({ x, y });
+        if (currentTool === 'eraser') {
+          renderStroke(mainCtx, {
+            type: 'eraser',
+            size: activeStroke.size,
+            points: [activeStroke.points[activeStroke.points.length - 2], { x, y }]
+          });
+        } else {
+          drawCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+          renderStroke(drawCtx, activeStroke);
+        }
+      }
+    });
+
+    container.addEventListener('pointerdown', (e) => {
+      closeAllPopups();
+      const x = e.clientX;
+      const y = e.clientY;
+
+      if (currentTool === 'select') {
+        const page = pages[currentPageIndex];
+
+        if (selectedImageIndex !== -1) {
+          const selImg = page.images[selectedImageIndex];
+          if (selImg && Math.hypot(x - (selImg.x + selImg.w), y - selImg.y) <= 18) {
+            page.images.splice(selectedImageIndex, 1);
+            selectedImageIndex = -1;
+            renderImages();
+            return;
+          }
+
+          if (selImg && Math.hypot(x - (selImg.x + selImg.w), y - (selImg.y + selImg.h)) <= 18) {
+            imgDragState = {
+              mode: 'resize',
+              startX: x, startY: y,
+              origW: selImg.w, origH: selImg.h
+            };
+            return;
+          }
+        }
+
+        let clickedIdx = -1;
+        for (let i = page.images.length - 1; i >= 0; i--) {
+          const img = page.images[i];
+          if (x >= img.x && x <= img.x + img.w && y >= img.y && y <= img.y + img.h) {
+            clickedIdx = i;
+            break;
+          }
+        }
+
+        if (clickedIdx !== -1) {
+          selectedImageIndex = clickedIdx;
+          const img = page.images[clickedIdx];
+          imgDragState = {
+            mode: 'move',
+            startX: x, startY: y,
+            origX: img.x, origY: img.y
+          };
+          renderImages();
+          return;
+        } else {
+          selectedImageIndex = -1;
+          renderImages();
+          return;
+        }
+      }
+
+      isDrawing = true;
+
+      if (currentTool === 'laser') return;
+
+      if (currentTool === 'eraser' && eraserMode === 'object') {
+        eraseStrokesAtPoint(x, y, brushSize / 2);
+        return;
+      }
+
+      if (currentTool === 'shape') {
+        activeStroke = {
           type: 'shape',
           shape: currentShape,
           color: currentColor,
           size: brushSize,
-          startX: x,
-          startY: y,
-          endX: x,
-          endY: y
+          startX: x, startY: y, endX: x, endY: y
         };
       } else {
         const dynamicSize = (currentTool === 'highlighter') ? Math.max(brushSize * 2.5, 24) : brushSize;
-        activeItem = {
+        activeStroke = {
           type: currentTool,
           color: currentColor,
           size: dynamicSize,
@@ -577,63 +766,37 @@
 
       if (currentTool !== 'eraser') {
         drawCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-        renderItem(drawCtx, activeItem);
+        renderStroke(drawCtx, activeStroke);
       } else {
-        renderItem(mainCtx, activeItem);
-      }
-    });
-
-    container.addEventListener('pointermove', (e) => {
-      if (!isDrawing) return;
-      e.preventDefault();
-      const x = e.clientX;
-      const y = e.clientY;
-
-      if (currentTool === 'eraser' && eraserMode === 'object') {
-        removeItemsAtPoint(x, y, brushSize / 2);
-        return;
-      }
-
-      if (currentTool === 'shape') {
-        activeItem.endX = x;
-        activeItem.endY = y;
-        drawCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-        renderItem(drawCtx, activeItem);
-      } else {
-        activeItem.points.push({ x, y });
-        if (currentTool === 'eraser') {
-          renderItem(mainCtx, {
-            type: 'eraser',
-            size: activeItem.size,
-            points: [activeItem.points[activeItem.points.length - 2], { x, y }]
-          });
-        } else {
-          drawCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-          renderItem(drawCtx, activeItem);
-        }
+        renderStroke(mainCtx, activeStroke);
       }
     });
 
     function finishAction() {
+      if (imgDragState) imgDragState = null;
+      if (currentTool === 'laser') drawCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
       if (!isDrawing) return;
       isDrawing = false;
 
       if (currentTool === 'eraser' && eraserMode === 'object') return;
 
-      if (activeItem) {
-        pages[currentPageIndex].items.push(activeItem);
+      if (activeStroke) {
+        pages[currentPageIndex].strokes.push(activeStroke);
         pages[currentPageIndex].redoStack = [];
 
-        renderItem(mainCtx, activeItem);
+        renderStroke(mainCtx, activeStroke);
         drawCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
       }
-      activeItem = null;
+      activeStroke = null;
     }
 
     container.addEventListener('pointerup', finishAction);
     container.addEventListener('pointercancel', finishAction);
+    container.addEventListener('pointerleave', () => {
+      penPointer.style.display = 'none';
+      finishAction();
+    });
 
-    // Draggable Toolbars
     function makeElementDraggable(elm, handleSelector) {
       let isDragging = false;
       let startX, startY, origLeft, origTop;
@@ -664,11 +827,8 @@
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
 
-        let newX = origLeft + dx;
-        let newY = origTop + dy;
-
-        newX = Math.max(8, Math.min(window.innerWidth - elm.offsetWidth - 8, newX));
-        newY = Math.max(8, Math.min(window.innerHeight - elm.offsetHeight - 8, newY));
+        let newX = Math.max(8, Math.min(window.innerWidth - elm.offsetWidth - 8, origLeft + dx));
+        let newY = Math.max(8, Math.min(window.innerHeight - elm.offsetHeight - 8, origTop + dy));
 
         elm.style.left = newX + 'px';
         elm.style.top = newY + 'px';
@@ -689,7 +849,6 @@
     document.querySelectorAll('.bar').forEach(bar => makeElementDraggable(bar, '.drag-handle'));
     makeElementDraggable(document.getElementById('toggle-ui-btn'), null);
 
-    // Toggle Canvas Clean UI
     const toggleUiBtn = document.getElementById('toggle-ui-btn');
     let isUiHidden = false;
 
@@ -700,11 +859,12 @@
       toggleUiBtn.textContent = isUiHidden ? '👁‍🗨' : '👁';
     };
 
-    // Sub-Popups Management
+    const selectBtn = document.getElementById('tool-select');
     const penBtn = document.getElementById('tool-pen');
     const highBtn = document.getElementById('tool-highlighter');
     const eraserBtn = document.getElementById('tool-eraser');
     const shapeBtn = document.getElementById('tool-shape');
+    const laserBtn = document.getElementById('tool-laser');
     const exportBtn = document.getElementById('export-btn');
 
     const colorTrigger = document.getElementById('color-trigger');
@@ -718,13 +878,13 @@
 
     function positionPopup(popup, anchorElm, preferTop = true) {
       const rect = anchorElm.getBoundingClientRect();
-      const popupHeight = popup.offsetHeight || 60;
+      const popupHeight = popup.offsetHeight || 120;
       let top = preferTop ? (rect.top - popupHeight - 12) : (rect.bottom + 10);
       if (top < 10) top = rect.bottom + 10;
       if (top + popupHeight > window.innerHeight) top = rect.top - popupHeight - 12;
 
       let left = rect.left - 10;
-      if (left + 170 > window.innerWidth) left = window.innerWidth - 180;
+      if (left + 230 > window.innerWidth) left = window.innerWidth - 240;
 
       popup.style.top = top + 'px';
       popup.style.left = Math.max(10, left) + 'px';
@@ -740,16 +900,25 @@
 
     function setActiveTool(tool) {
       currentTool = tool;
-      [penBtn, highBtn, eraserBtn, shapeBtn].forEach(b => b.classList.remove('active'));
+      [selectBtn, penBtn, highBtn, eraserBtn, shapeBtn, laserBtn].forEach(b => b.classList.remove('active'));
+      if (tool === 'select') selectBtn.classList.add('active');
       if (tool === 'pen') penBtn.classList.add('active');
       if (tool === 'highlighter') highBtn.classList.add('active');
       if (tool === 'eraser') eraserBtn.classList.add('active');
       if (tool === 'shape') shapeBtn.classList.add('active');
+      if (tool === 'laser') laserBtn.classList.add('active');
+
+      if (tool !== 'select') {
+        selectedImageIndex = -1;
+        renderImages();
+      }
       closeAllPopups();
     }
 
+    selectBtn.onclick = () => setActiveTool('select');
     penBtn.onclick = () => setActiveTool('pen');
     highBtn.onclick = () => setActiveTool('highlighter');
+    laserBtn.onclick = () => setActiveTool('laser');
 
     eraserBtn.onclick = () => {
       if (currentTool === 'eraser') {
@@ -809,7 +978,6 @@
       }
     };
 
-    // Shape Selections
     document.querySelectorAll('#shapes-popup .popup-btn').forEach(btn => {
       btn.onclick = () => {
         document.querySelectorAll('#shapes-popup .popup-btn').forEach(b => b.classList.remove('selected'));
@@ -820,7 +988,6 @@
       };
     });
 
-    // Eraser Selections
     document.getElementById('opt-pixel-eraser').onclick = () => {
       eraserMode = 'pixel';
       document.getElementById('opt-pixel-eraser').classList.add('selected');
@@ -837,20 +1004,29 @@
       eraserPopup.classList.remove('show');
     };
 
-    // Color Handling
+    // Color Grid & Custom Picker Setup
+    function applyColor(color) {
+      currentColor = color;
+      colorTrigger.style.background = currentColor;
+      if (currentTool === 'eraser' || currentTool === 'select') setActiveTool('pen');
+    }
+
     document.querySelectorAll('#color-popup .color-dot').forEach(dot => {
       dot.onclick = (e) => {
         e.stopPropagation();
         document.querySelectorAll('#color-popup .color-dot').forEach(d => d.classList.remove('active'));
         dot.classList.add('active');
-        currentColor = dot.dataset.color;
-        colorTrigger.style.background = currentColor;
-        if (currentTool === 'eraser') setActiveTool('pen');
+        applyColor(dot.dataset.color);
         colorPopup.classList.remove('show');
       };
     });
 
-    // Size Slider Handling
+    const customColorInput = document.getElementById('custom-color-input');
+    customColorInput.addEventListener('input', (e) => {
+      document.querySelectorAll('#color-popup .color-dot').forEach(d => d.classList.remove('active'));
+      applyColor(e.target.value);
+    });
+
     const brushSlider = document.getElementById('brush-size');
     const sizeVal = document.getElementById('size-val');
     const sizeTriggerText = document.getElementById('size-trigger-text');
@@ -869,9 +1045,6 @@
       sizePreviewDot.style.height = previewDiameter + 'px';
     });
 
-    // ==========================================
-    // IMAGE IMPORT FUNCTIONALITY
-    // ==========================================
     const importImgBtn = document.getElementById('import-img-btn');
     const imageInput = document.getElementById('image-input');
 
@@ -885,93 +1058,81 @@
       reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
-          // Scale image nicely to fit canvas viewport without overflowing
-          const maxW = window.innerWidth * 0.65;
-          const maxH = window.innerHeight * 0.65;
+          const maxW = window.innerWidth * 0.6;
+          const maxH = window.innerHeight * 0.6;
           let w = img.width;
           let h = img.height;
 
-          if (w > maxW) {
-            h = (maxW / w) * h;
-            w = maxW;
-          }
-          if (h > maxH) {
-            w = (maxH / h) * w;
-            h = maxH;
-          }
+          if (w > maxW) { h = (maxW / w) * h; w = maxW; }
+          if (h > maxH) { w = (maxH / h) * w; h = maxH; }
 
-          // Center on screen
           const x = (window.innerWidth - w) / 2;
           const y = (window.innerHeight - h) / 2;
 
-          const imgItem = {
-            type: 'image',
-            imgElement: img,
-            x: x,
-            y: y,
-            w: w,
-            h: h
-          };
-
-          pages[currentPageIndex].items.push(imgItem);
-          pages[currentPageIndex].redoStack = [];
-          redrawPage();
+          pages[currentPageIndex].images.push({
+            element: img,
+            x: x, y: y, w: w, h: h
+          });
+          selectedImageIndex = pages[currentPageIndex].images.length - 1;
+          setActiveTool('select');
+          renderImages();
         };
         img.src = event.target.result;
       };
       reader.readAsDataURL(file);
-      imageInput.value = ''; // Reset for re-uploading identical file if needed
+      imageInput.value = '';
     });
 
-    // Undo / Redo / Clear
     document.getElementById('undo-btn').onclick = () => {
       const page = pages[currentPageIndex];
-      if (page.items.length > 0) {
-        page.redoStack.push(page.items.pop());
-        redrawPage();
+      if (page.strokes.length > 0) {
+        page.redoStack.push(page.strokes.pop());
+        redrawStrokes();
       }
     };
 
     document.getElementById('redo-btn').onclick = () => {
       const page = pages[currentPageIndex];
       if (page.redoStack.length > 0) {
-        page.items.push(page.redoStack.pop());
-        redrawPage();
+        page.strokes.push(page.redoStack.pop());
+        redrawStrokes();
       }
     };
 
     document.getElementById('clear-btn').onclick = () => {
-      pages[currentPageIndex].items = [];
+      pages[currentPageIndex].strokes = [];
       pages[currentPageIndex].redoStack = [];
-      redrawPage();
+      redrawStrokes();
     };
 
-    // Page Management
     const pageNumText = document.getElementById('page-num');
     function updatePageIndicator() {
       pageNumText.textContent = `${currentPageIndex + 1}/${pages.length}`;
     }
 
     document.getElementById('add-page').onclick = () => {
-      pages.push({ items: [], redoStack: [] });
+      pages.push({ strokes: [], images: [], redoStack: [] });
       currentPageIndex = pages.length - 1;
+      selectedImageIndex = -1;
       updatePageIndicator();
-      redrawPage();
+      redrawAll();
     };
 
     document.getElementById('prev-page').onclick = () => {
       if (currentPageIndex > 0) {
         currentPageIndex--;
+        selectedImageIndex = -1;
         updatePageIndicator();
-        redrawPage();
+        redrawAll();
       }
     };
 
     document.getElementById('next-page').onclick = () => {
       if (currentPageIndex < pages.length - 1) {
         currentPageIndex++;
+        selectedImageIndex = -1;
         updatePageIndicator();
-        redrawPage();
+        redrawAll();
       }
     };
 
@@ -979,18 +1140,27 @@
       if (pages.length > 1) {
         pages.splice(currentPageIndex, 1);
         if (currentPageIndex >= pages.length) currentPageIndex = pages.length - 1;
+        selectedImageIndex = -1;
         updatePageIndicator();
-        redrawPage();
+        redrawAll();
       }
     };
 
-    // Background Cycling
+    // Background toggle with Auto-Color Adaptation
     const bgBtn = document.getElementById('bg-btn');
-    const bgModes = ['grid', 'ruled', 'blank', 'dark'];
+    const bgModes = ['ruled', 'grid', 'blank', 'dark'];
     bgBtn.onclick = () => {
       const nextIdx = (bgModes.indexOf(bgMode) + 1) % bgModes.length;
       bgMode = bgModes[nextIdx];
       bgBtn.textContent = bgMode.charAt(0).toUpperCase() + bgMode.slice(1);
+      
+      // If user switches to Dark Board and has black ink selected, automatically suggest white ink
+      if (bgMode === 'dark' && currentColor === '#1e293b') {
+        applyColor('#ffffff');
+      } else if (bgMode !== 'dark' && currentColor === '#ffffff') {
+        applyColor('#1e293b');
+      }
+
       renderBackground();
     };
 
@@ -1004,11 +1174,16 @@
       expCtx.scale(dpr, dpr);
       renderBackground(expCtx, window.innerWidth, window.innerHeight);
 
-      pageObj.items.forEach(item => renderItem(expCtx, item));
+      pageObj.images.forEach(imgItem => {
+        if (imgItem.element && imgItem.element.complete) {
+          expCtx.drawImage(imgItem.element, imgItem.x, imgItem.y, imgItem.w, imgItem.h);
+        }
+      });
+
+      pageObj.strokes.forEach(s => renderStroke(expCtx, s));
       return exportCanvas;
     }
 
-    // Export PNG
     document.getElementById('opt-export-png').onclick = () => {
       exportPopup.classList.remove('show');
       const canvasToSave = renderPageToCanvas(pages[currentPageIndex]);
@@ -1018,7 +1193,6 @@
       link.click();
     };
 
-    // Export PDF
     document.getElementById('opt-export-pdf').onclick = async () => {
       exportPopup.classList.remove('show');
       const { jsPDF } = window.jspdf;
@@ -1033,9 +1207,7 @@
       });
 
       for (let i = 0; i < pages.length; i++) {
-        if (i > 0) {
-          pdf.addPage([window.innerWidth, window.innerHeight], orientation);
-        }
+        if (i > 0) pdf.addPage([window.innerWidth, window.innerHeight], orientation);
         const renderedCanvas = renderPageToCanvas(pages[i]);
         const imgData = renderedCanvas.toDataURL('image/jpeg', 0.95);
         pdf.addImage(imgData, 'JPEG', 0, 0, window.innerWidth, window.innerHeight);
@@ -1044,7 +1216,6 @@
       pdf.save('CanvasPad-Notes.pdf');
     };
 
-    // Initialize
     resize();
     updatePageIndicator();
   </script>
