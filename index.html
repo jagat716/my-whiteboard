@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>CanvasPad Pro - Double Tap Paste & Drag Edition</title>
+  <title>CanvasPad Pro - Strict Lasso & Image Copy Edition</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -11,43 +11,59 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #ffffff;
+      background: #cbd5e1;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       user-select: none;
       -webkit-user-select: none;
     }
 
-    #canvas-container {
+    #viewport-scroller {
       position: absolute;
       top: 0; left: 0;
       width: 100vw; height: 100vh;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0 0 100px 0;
+    }
+
+    .page-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      min-height: 100vh;
+      background: #ffffff;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
       touch-action: none;
     }
+
     canvas {
       position: absolute;
       top: 0; left: 0;
-      width: 100vw; height: 100vh;
+      width: 100%; height: 100%;
       display: block;
     }
-    #bg-canvas { z-index: 1; }
-    #image-canvas { z-index: 2; }
-    #main-canvas { z-index: 3; }
-    #draw-canvas { z-index: 4; }
+    .bg-canvas { z-index: 1; }
+    .image-canvas { z-index: 2; }
+    .main-canvas { z-index: 3; }
+    .draw-canvas { z-index: 4; }
 
-    /* Custom Live Pen Target Pointer */
     #pen-pointer {
-      position: absolute;
+      position: fixed;
       pointer-events: none;
       border-radius: 50%;
       border: 1.5px solid rgba(79, 70, 229, 0.7);
       background: rgba(79, 70, 229, 0.15);
       transform: translate(-50%, -50%);
-      z-index: 40;
+      z-index: 50;
       display: none;
       transition: width 0.05s ease, height 0.05s ease;
     }
 
-    /* Area Selection Actions Floating Bar */
     #selection-action-bar {
       position: absolute;
       display: none;
@@ -78,16 +94,15 @@
     .sel-action-btn:active { transform: scale(0.95); }
     .sel-action-btn.del { color: #f87171; }
 
-    /* Draggable Floating Bars */
     .bar {
       position: fixed;
-      z-index: 20;
-      background: rgba(255, 255, 255, 0.94);
+      z-index: 30;
+      background: rgba(255, 255, 255, 0.95);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border: 1px solid rgba(226, 232, 240, 0.85);
       border-radius: 20px;
-      box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.12);
       display: flex;
       align-items: center;
       gap: 6px;
@@ -123,7 +138,6 @@
       overflow-x: auto;
     }
 
-    /* Master Clean Mode Button */
     #toggle-ui-btn {
       position: fixed;
       top: 16px;
@@ -232,7 +246,7 @@
       box-shadow: 0 10px 26px rgba(0,0,0,0.14);
       padding: 8px;
       gap: 6px;
-      z-index: 30;
+      z-index: 35;
     }
     .sub-popup.show { display: flex; }
 
@@ -302,7 +316,7 @@
   <button id="toggle-ui-btn" title="Toggle Clean Mode">👁</button>
   <div id="pen-pointer"></div>
 
-  <!-- Area Selection Floating Menu (Copy / Paste / Delete) -->
+  <!-- Area Selection Action Bar -->
   <div id="selection-action-bar">
     <button class="sel-action-btn" id="act-copy">📋 Copy</button>
     <button class="sel-action-btn" id="act-paste">📄 Paste</button>
@@ -314,11 +328,11 @@
   <div class="bar" id="top-left">
     <div class="drag-handle" title="Drag me">⋮⋮</div>
     <strong style="color: #4f46e5; font-size: 15px; margin-right: 4px;">CanvasPad</strong>
-    <button class="btn btn-icon" id="prev-page">‹</button>
+    <button class="btn btn-icon" id="prev-page" title="Scroll to Prev Page">‹</button>
     <span id="page-num" style="font-weight: 700; font-size: 13px; color: #334155;">1/1</span>
-    <button class="btn btn-icon" id="next-page">›</button>
-    <button class="btn btn-icon" id="add-page">+</button>
-    <button class="btn btn-icon" id="del-page" style="color: #ef4444;">🗑</button>
+    <button class="btn btn-icon" id="next-page" title="Scroll to Next Page">›</button>
+    <button class="btn btn-icon" id="add-page" title="Add Page Below">+</button>
+    <button class="btn btn-icon" id="del-page" style="color: #ef4444;" title="Delete Page">🗑</button>
   </div>
 
   <!-- Top Mid: History -->
@@ -329,13 +343,28 @@
     <button class="btn btn-icon" id="clear-btn">↺</button>
   </div>
 
-  <!-- Top Right: Image, BG, Export -->
+  <!-- Top Right: File, Image, BG, Export -->
   <div class="bar" id="top-right">
     <div class="drag-handle" title="Drag me">⋮⋮</div>
+    <button class="btn" id="file-menu-btn" style="color: #4f46e5;">📁 File ▾</button>
     <button class="btn" id="import-img-btn">📷 Image</button>
     <input type="file" id="image-input" accept="image/*" style="display: none;">
     <button class="btn" id="bg-btn">Ruled</button>
     <button class="btn" id="export-btn" style="background: #10b981; color: white;">Export ▾</button>
+  </div>
+
+  <!-- File Submenu -->
+  <div id="file-popup" class="sub-popup" style="flex-direction: column;">
+    <button class="popup-btn" id="opt-new-project"><span>➕</span> New Whiteboard</button>
+    <button class="popup-btn" id="opt-save-project"><span>💾</span> Save Project (.canvaspad)</button>
+    <button class="popup-btn" id="opt-open-project"><span>📂</span> Open Project...</button>
+    <input type="file" id="project-file-input" accept=".canvaspad,.json" style="display: none;">
+  </div>
+
+  <!-- Select Options Submenu -->
+  <div id="select-popup" class="sub-popup" style="flex-direction: column;">
+    <button class="popup-btn selected" id="opt-select-lasso"><span>➰</span> Strict Lasso (Freehand Loop)</button>
+    <button class="popup-btn" id="opt-select-box"><span>⬚</span> Rectangle Box</button>
   </div>
 
   <!-- Export Popup -->
@@ -389,7 +418,7 @@
   <!-- Bottom Dock -->
   <div class="bar" id="bottom-dock">
     <div class="drag-handle" title="Drag me">⋮⋮</div>
-    <button class="btn" id="tool-select">✂️ Select</button>
+    <button class="btn" id="tool-select">✂️ Lasso ▾</button>
     <button class="btn active" id="tool-pen">Pen</button>
     <button class="btn" id="tool-highlighter">Highlight</button>
     <button class="btn" id="tool-eraser">Eraser (Obj)</button>
@@ -405,28 +434,16 @@
     </div>
   </div>
 
-  <!-- Multi-Layer Canvas Architecture -->
-  <div id="canvas-container">
-    <canvas id="bg-canvas"></canvas>
-    <canvas id="image-canvas"></canvas>
-    <canvas id="main-canvas"></canvas>
-    <canvas id="draw-canvas"></canvas>
-  </div>
+  <!-- Viewport -->
+  <div id="viewport-scroller"></div>
 
   <script>
-    const bgCanvas = document.getElementById('bg-canvas');
-    const bgCtx = bgCanvas.getContext('2d');
-    const imgCanvas = document.getElementById('image-canvas');
-    const imgCtx = imgCanvas.getContext('2d');
-    const mainCanvas = document.getElementById('main-canvas');
-    const mainCtx = mainCanvas.getContext('2d');
-    const drawCanvas = document.getElementById('draw-canvas');
-    const drawCtx = drawCanvas.getContext('2d');
-
+    const scroller = document.getElementById('viewport-scroller');
     const penPointer = document.getElementById('pen-pointer');
     const selActionBar = document.getElementById('selection-action-bar');
 
     let currentTool = 'pen';
+    let selectMode = 'lasso';
     let currentShape = 'line';
     let eraserMode = 'object';
     let currentColor = '#1e293b';
@@ -440,59 +457,96 @@
     let activeStroke = null;
     let imgDragState = null;
 
-    // Advanced Clipboard and Active Selection System
+    // Clipboard data storing strokes AND images
     let clipboardData = null; // { strokes: [], images: [], bounds: {x,y,w,h} }
-    let selectionBox = null;  // { x, y, w, h }
-    let selectedStrokes = []; // References to strokes currently inside selection
+    let selectionBox = null;
+    let lassoPoints = [];
+    let selectedStrokes = [];
+    let selectedImages = [];
     let isSelectingArea = false;
     let isMovingSelection = false;
     let moveStartPos = { x: 0, y: 0 };
+    let activeSelectionPageIndex = 0;
 
-    // Double-Tap Detection State
+    // Double-Tap detection
     let lastTapTime = 0;
     let lastTapPos = { x: 0, y: 0 };
+    let pageElements = [];
 
-    function resize() {
-      const dpr = window.devicePixelRatio || 1;
-      const w = window.innerWidth;
-      const h = window.innerHeight;
+    // ========================================================
+    // TWO-FINGER SCROLL ENGINE
+    // ========================================================
+    let isTwoFingerScroll = false;
+    let twoFingerStartY = 0;
+    let initialScrollTop = 0;
 
-      [bgCanvas, imgCanvas, mainCanvas, drawCanvas].forEach(c => {
-        c.width = Math.floor(w * dpr);
-        c.height = Math.floor(h * dpr);
-        c.style.width = w + 'px';
-        c.style.height = h + 'px';
-        const ctx = c.getContext('2d');
-        ctx.resetTransform();
-        ctx.scale(dpr, dpr);
-      });
+    window.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        isTwoFingerScroll = true;
+        isDrawing = false;
+        activeStroke = null;
+        isSelectingArea = false;
+        twoFingerStartY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        initialScrollTop = scroller.scrollTop;
+      }
+    }, { passive: false });
 
-      renderBackground();
-      redrawAll();
+    window.addEventListener('touchmove', (e) => {
+      if (isTwoFingerScroll && e.touches.length === 2) {
+        e.preventDefault();
+        const currentY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        const deltaY = currentY - twoFingerStartY;
+        scroller.scrollTop = initialScrollTop - deltaY;
+      }
+    }, { passive: false });
+
+    window.addEventListener('touchend', (e) => {
+      if (e.touches.length < 2) {
+        isTwoFingerScroll = false;
+      }
+    });
+
+    function createPageElement(index) {
+      const container = document.createElement('div');
+      container.className = 'page-container';
+      container.dataset.pageIndex = index;
+
+      const bgC = document.createElement('canvas');
+      bgC.className = 'bg-canvas';
+      const imgC = document.createElement('canvas');
+      imgC.className = 'image-canvas';
+      const mainC = document.createElement('canvas');
+      mainC.className = 'main-canvas';
+      const drawC = document.createElement('canvas');
+      drawC.className = 'draw-canvas';
+
+      container.appendChild(bgC);
+      container.appendChild(imgC);
+      container.appendChild(mainC);
+      container.appendChild(drawC);
+
+      attachCanvasEvents(container, index);
+      return { container, bgC, imgC, mainC, drawC };
     }
-    window.addEventListener('resize', resize);
-    window.addEventListener('orientationchange', () => setTimeout(resize, 150));
 
-    function renderBackground(targetCtx = bgCtx, targetW = window.innerWidth, targetH = window.innerHeight) {
-      targetCtx.clearRect(0, 0, targetW, targetH);
-
+    function renderBackground(targetCtx, w = window.innerWidth, h = window.innerHeight) {
+      targetCtx.clearRect(0, 0, w, h);
       if (bgMode === 'dark') {
         targetCtx.fillStyle = '#0f172a';
-        targetCtx.fillRect(0, 0, targetW, targetH);
+        targetCtx.fillRect(0, 0, w, h);
         return;
       }
-
       targetCtx.fillStyle = '#ffffff';
-      targetCtx.fillRect(0, 0, targetW, targetH);
+      targetCtx.fillRect(0, 0, w, h);
 
       if (bgMode === 'ruled') {
         targetCtx.strokeStyle = '#e2e8f0';
         targetCtx.lineWidth = 1.2;
         const step = 34;
         targetCtx.beginPath();
-        for (let y = step; y <= targetH; y += step) {
+        for (let y = step; y <= h; y += step) {
           targetCtx.moveTo(0, y);
-          targetCtx.lineTo(targetW, y);
+          targetCtx.lineTo(w, y);
         }
         targetCtx.stroke();
       } else if (bgMode === 'grid') {
@@ -500,48 +554,51 @@
         targetCtx.lineWidth = 1;
         const step = 28;
         targetCtx.beginPath();
-        for (let x = 0; x <= targetW; x += step) {
-          targetCtx.moveTo(x, 0); targetCtx.lineTo(x, targetH);
+        for (let x = 0; x <= w; x += step) {
+          targetCtx.moveTo(x, 0); targetCtx.lineTo(x, h);
         }
-        for (let y = 0; y <= targetH; y += step) {
+        for (let y = 0; y <= h; y += step) {
           targetCtx.moveTo(0, y); targetCtx.lineTo(targetW, y);
         }
         targetCtx.stroke();
       }
     }
 
-    function renderImages(targetCtx = imgCtx, isExporting = false) {
-      targetCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-      const page = pages[currentPageIndex];
+    function renderPageImages(pageIdx, isExporting = false) {
+      const pElem = pageElements[pageIdx];
+      if (!pElem) return;
+      const ctx = pElem.imgC.getContext('2d');
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
+      const page = pages[pageIdx];
       page.images.forEach((imgItem, idx) => {
         if (imgItem.element && imgItem.element.complete) {
-          targetCtx.drawImage(imgItem.element, imgItem.x, imgItem.y, imgItem.w, imgItem.h);
+          ctx.drawImage(imgItem.element, imgItem.x, imgItem.y, imgItem.w, imgItem.h);
 
-          if (idx === selectedImageIndex && !isExporting) {
-            targetCtx.save();
-            targetCtx.strokeStyle = '#4f46e5';
-            targetCtx.lineWidth = 2;
-            targetCtx.strokeRect(imgItem.x, imgItem.y, imgItem.w, imgItem.h);
+          if (pageIdx === currentPageIndex && idx === selectedImageIndex && !isExporting) {
+            ctx.save();
+            ctx.strokeStyle = '#4f46e5';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(imgItem.x, imgItem.y, imgItem.w, imgItem.h);
 
-            targetCtx.fillStyle = '#ffffff';
-            targetCtx.strokeStyle = '#4f46e5';
-            targetCtx.lineWidth = 2.5;
-            targetCtx.beginPath();
-            targetCtx.arc(imgItem.x + imgItem.w, imgItem.y + imgItem.h, 9, 0, Math.PI * 2);
-            targetCtx.fill();
-            targetCtx.stroke();
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#4f46e5';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.arc(imgItem.x + imgItem.w, imgItem.y + imgItem.h, 9, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
 
-            targetCtx.fillStyle = '#ef4444';
-            targetCtx.beginPath();
-            targetCtx.arc(imgItem.x + imgItem.w, imgItem.y, 11, 0, Math.PI * 2);
-            targetCtx.fill();
-            targetCtx.fillStyle = '#ffffff';
-            targetCtx.font = 'bold 12px sans-serif';
-            targetCtx.textAlign = 'center';
-            targetCtx.textBaseline = 'middle';
-            targetCtx.fillText('✕', imgItem.x + imgItem.w, imgItem.y);
-            targetCtx.restore();
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.arc(imgItem.x + imgItem.w, imgItem.y, 11, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('✕', imgItem.x + imgItem.w, imgItem.y);
+            ctx.restore();
           }
         }
       });
@@ -590,49 +647,109 @@
       ctx.restore();
     }
 
-    function redrawStrokes() {
-      mainCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-      const page = pages[currentPageIndex];
-      page.strokes.forEach(s => renderStroke(mainCtx, s));
+    function redrawPageStrokes(pageIdx) {
+      const pElem = pageElements[pageIdx];
+      if (!pElem) return;
+      const ctx = pElem.mainC.getContext('2d');
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      const page = pages[pageIdx];
+      page.strokes.forEach(s => renderStroke(ctx, s));
     }
 
-    function redrawAll() {
-      renderImages();
-      redrawStrokes();
+    function setupDOMPages() {
+      scroller.innerHTML = '';
+      pageElements = [];
+      const dpr = window.devicePixelRatio || 1;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+
+      pages.forEach((p, idx) => {
+        const pElem = createPageElement(idx);
+        scroller.appendChild(pElem.container);
+        pageElements.push(pElem);
+
+        [pElem.bgC, pElem.imgC, pElem.mainC, pElem.drawC].forEach(c => {
+          c.width = Math.floor(w * dpr);
+          c.height = Math.floor(h * dpr);
+          const ctx = c.getContext('2d');
+          ctx.resetTransform();
+          ctx.scale(dpr, dpr);
+        });
+
+        renderBackground(pElem.bgC.getContext('2d'), w, h);
+        renderPageImages(idx);
+        redrawPageStrokes(idx);
+      });
+      updatePageIndicator();
     }
 
-    // Render Selection Box & Floating Controls
+    // ========================================================
+    // STRICT POINT-IN-POLYGON (RAY CASTING ALGORITHM)
+    // ========================================================
+    function isPointInPolygon(point, vs) {
+      const x = point.x, y = point.y;
+      let inside = false;
+      for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+        const xi = vs[i].x, yi = vs[i].y;
+        const xj = vs[j].x, yj = vs[j].y;
+        const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+
     function drawSelectionMarquee() {
-      drawCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-      if (!selectionBox) return;
+      const pElem = pageElements[activeSelectionPageIndex];
+      if (!pElem) return;
+      const ctx = pElem.drawC.getContext('2d');
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
-      drawCtx.save();
-      drawCtx.strokeStyle = '#4f46e5';
-      drawCtx.lineWidth = 1.8;
-      drawCtx.setLineDash([6, 4]);
-      drawCtx.strokeRect(selectionBox.x, selectionBox.y, selectionBox.w, selectionBox.h);
-      drawCtx.fillStyle = 'rgba(79, 70, 229, 0.08)';
-      drawCtx.fillRect(selectionBox.x, selectionBox.y, selectionBox.w, selectionBox.h);
-      drawCtx.restore();
+      ctx.save();
+      ctx.strokeStyle = '#4f46e5';
+      ctx.lineWidth = 1.8;
+      ctx.setLineDash([6, 4]);
 
-      selActionBar.style.display = 'flex';
-      let topY = selectionBox.y - 12;
-      if (topY < 60) topY = selectionBox.y + selectionBox.h + 42;
-      let leftX = Math.max(10, Math.min(window.innerWidth - 230, selectionBox.x));
-      selActionBar.style.top = topY + 'px';
-      selActionBar.style.left = leftX + 'px';
+      if (selectMode === 'lasso' && lassoPoints.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
+        for (let i = 1; i < lassoPoints.length; i++) {
+          ctx.lineTo(lassoPoints[i].x, lassoPoints[i].y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(79, 70, 229, 0.08)';
+        ctx.fill();
+      } else if (selectionBox) {
+        ctx.strokeRect(selectionBox.x, selectionBox.y, selectionBox.w, selectionBox.h);
+        ctx.fillStyle = 'rgba(79, 70, 229, 0.08)';
+        ctx.fillRect(selectionBox.x, selectionBox.y, selectionBox.w, selectionBox.h);
+      }
+      ctx.restore();
+
+      if (selectionBox) {
+        const rect = pElem.container.getBoundingClientRect();
+        selActionBar.style.display = 'flex';
+        let topY = rect.top + selectionBox.y - 12;
+        if (topY < 60) topY = rect.top + selectionBox.y + selectionBox.h + 42;
+        let leftX = Math.max(10, Math.min(window.innerWidth - 230, rect.left + selectionBox.x));
+        selActionBar.style.top = topY + 'px';
+        selActionBar.style.left = leftX + 'px';
+      }
     }
 
     function clearSelection() {
       selectionBox = null;
+      lassoPoints = [];
       selectedStrokes = [];
+      selectedImages = [];
       isSelectingArea = false;
       isMovingSelection = false;
       selActionBar.style.display = 'none';
-      drawCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      pageElements.forEach(p => {
+        p.drawC.getContext('2d').clearRect(0, 0, window.innerWidth, window.innerHeight);
+      });
     }
 
-    // Calculate Bounding Box of Strokes to Allow Easy Selection by Direct Touch
     function getStrokeBounds(stroke) {
       if (stroke.points && stroke.points.length > 0) {
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -661,8 +778,8 @@
       return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
     }
 
-    function eraseStrokesAtPoint(x, y, radius) {
-      const page = pages[currentPageIndex];
+    function eraseStrokesAtPoint(pageIdx, x, y, radius) {
+      const page = pages[pageIdx];
       const initialCount = page.strokes.length;
 
       page.strokes = page.strokes.filter(item => {
@@ -687,15 +804,15 @@
 
       if (page.strokes.length !== initialCount) {
         page.redoStack = [];
-        redrawStrokes();
+        redrawPageStrokes(pageIdx);
       }
     }
 
-    function updatePenPointer(x, y) {
+    function updatePenPointer(clientX, clientY) {
       if (currentTool === 'pen' || currentTool === 'highlighter' || currentTool === 'eraser' || currentTool === 'laser') {
         penPointer.style.display = 'block';
-        penPointer.style.left = x + 'px';
-        penPointer.style.top = y + 'px';
+        penPointer.style.left = clientX + 'px';
+        penPointer.style.top = clientY + 'px';
 
         if (currentTool === 'laser') {
           penPointer.style.width = '14px';
@@ -716,17 +833,17 @@
       }
     }
 
-    // Function to Paste Clipboard Content at Target Coordinate
-    function pasteAtLocation(targetX, targetY) {
+    // Paste Cloned Strokes and Images at target position
+    function pasteAtLocation(pageIdx, targetX, targetY) {
       if (!clipboardData) return;
-      const page = pages[currentPageIndex];
+      const page = pages[pageIdx];
       const bounds = clipboardData.bounds;
-
       const offsetX = targetX - bounds.x;
       const offsetY = targetY - bounds.y;
-
       const newlyPastedStrokes = [];
+      const newlyPastedImages = [];
 
+      // Paste cloned strokes
       if (clipboardData.strokes && clipboardData.strokes.length > 0) {
         clipboardData.strokes.forEach(s => {
           if (s.points) {
@@ -734,10 +851,7 @@
               type: s.type,
               color: s.color,
               size: s.size,
-              points: s.points.map(pt => ({
-                x: pt.x + offsetX,
-                y: pt.y + offsetY
-              }))
+              points: s.points.map(pt => ({ x: pt.x + offsetX, y: pt.y + offsetY }))
             };
             page.strokes.push(newStroke);
             newlyPastedStrokes.push(newStroke);
@@ -755,299 +869,382 @@
         });
       }
 
-      // Automatically select the newly pasted content so user can immediately drag/move it!
-      selectionBox = {
-        x: targetX,
-        y: targetY,
-        w: bounds.w,
-        h: bounds.h
-      };
+      // Paste cloned images
+      if (clipboardData.images && clipboardData.images.length > 0) {
+        clipboardData.images.forEach(img => {
+          const newImg = {
+            element: img.element,
+            x: img.x + offsetX,
+            y: img.y + offsetY,
+            w: img.w,
+            h: img.h
+          };
+          page.images.push(newImg);
+          newlyPastedImages.push(newImg);
+        });
+      }
+
+      activeSelectionPageIndex = pageIdx;
+      selectionBox = { x: targetX, y: targetY, w: bounds.w, h: bounds.h };
       selectedStrokes = newlyPastedStrokes;
+      selectedImages = newlyPastedImages;
+      lassoPoints = [];
+
       drawSelectionMarquee();
-      redrawAll();
+      redrawPageStrokes(pageIdx);
+      renderPageImages(pageIdx);
     }
 
-    const container = document.getElementById('canvas-container');
+    function attachCanvasEvents(container, pageIdx) {
+      container.addEventListener('pointerdown', (e) => {
+        if (isTwoFingerScroll) return;
+        closeAllPopups();
 
-    container.addEventListener('pointermove', (e) => {
-      updatePenPointer(e.clientX, e.clientY);
+        const rect = container.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const now = Date.now();
+        currentPageIndex = pageIdx;
+        updatePageIndicator();
 
-      if (currentTool === 'select') {
-        if (isSelectingArea) {
-          const x = Math.min(activeStroke.startX, e.clientX);
-          const y = Math.min(activeStroke.startY, e.clientY);
-          const w = Math.abs(e.clientX - activeStroke.startX);
-          const h = Math.abs(e.clientY - activeStroke.startY);
-          selectionBox = { x, y, w, h };
-          drawSelectionMarquee();
-          return;
+        // Double-Tap to Paste
+        if (now - lastTapTime < 320 && Math.hypot(e.clientX - lastTapPos.x, e.clientY - lastTapPos.y) < 30) {
+          lastTapTime = 0;
+          if (clipboardData) {
+            pasteAtLocation(pageIdx, x, y);
+            return;
+          }
         }
+        lastTapTime = now;
+        lastTapPos = { x: e.clientX, y: e.clientY };
 
-        // Live Moving / Dragging the Selected Content Across Canvas
-        if (isMovingSelection && selectionBox) {
-          const dx = e.clientX - moveStartPos.x;
-          const dy = e.clientY - moveStartPos.y;
+        // SELECT / LASSO TOOL HANDLING
+        if (currentTool === 'select') {
+          activeSelectionPageIndex = pageIdx;
 
-          selectionBox.x += dx;
-          selectionBox.y += dy;
+          // 1. If clicking inside existing active selection box -> Drag it
+          if (selectionBox && x >= selectionBox.x && x <= selectionBox.x + selectionBox.w &&
+              y >= selectionBox.y && y <= selectionBox.y + selectionBox.h) {
+            isMovingSelection = true;
+            moveStartPos = { x, y };
+            return;
+          }
 
-          // Shift all currently selected strokes in real-time
-          selectedStrokes.forEach(s => {
-            if (s.points) {
-              s.points.forEach(pt => {
-                pt.x += dx;
-                pt.y += dy;
-              });
-            } else if (s.type === 'shape') {
-              s.startX += dx;
-              s.startY += dy;
-              s.endX += dx;
-              s.endY += dy;
+          // 2. Direct Tap Selection on Single Stroke
+          const page = pages[pageIdx];
+          let tappedStroke = null;
+          for (let i = page.strokes.length - 1; i >= 0; i--) {
+            const s = page.strokes[i];
+            const b = getStrokeBounds(s);
+            if (b && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+              tappedStroke = s;
+              selectionBox = { ...b };
+              selectedStrokes = [s];
+              selectedImages = [];
+              lassoPoints = [];
+              break;
             }
-          });
-
-          moveStartPos = { x: e.clientX, y: e.clientY };
-          drawSelectionMarquee();
-          redrawStrokes();
-          return;
-        }
-
-        if (imgDragState) {
-          e.preventDefault();
-          const page = pages[currentPageIndex];
-          const img = page.images[selectedImageIndex];
-          if (!img) return;
-
-          const dx = e.clientX - imgDragState.startX;
-          const dy = e.clientY - imgDragState.startY;
-
-          if (imgDragState.mode === 'move') {
-            img.x = imgDragState.origX + dx;
-            img.y = imgDragState.origY + dy;
-          } else if (imgDragState.mode === 'resize') {
-            const newW = Math.max(60, imgDragState.origW + dx);
-            const ratio = imgDragState.origH / imgDragState.origW;
-            img.w = newW;
-            img.h = newW * ratio;
           }
-          renderImages();
-          return;
-        }
-        return;
-      }
 
-      if (!isDrawing) return;
-      e.preventDefault();
-      const x = e.clientX;
-      const y = e.clientY;
-
-      if (currentTool === 'laser') {
-        drawCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-        drawCtx.beginPath();
-        drawCtx.arc(x, y, 6, 0, Math.PI * 2);
-        drawCtx.fillStyle = '#ef4444';
-        drawCtx.shadowColor = '#ef4444';
-        drawCtx.shadowBlur = 10;
-        drawCtx.fill();
-        return;
-      }
-
-      if (currentTool === 'eraser' && eraserMode === 'object') {
-        eraseStrokesAtPoint(x, y, brushSize / 2);
-        return;
-      }
-
-      if (currentTool === 'shape') {
-        activeStroke.endX = x;
-        activeStroke.endY = y;
-        drawCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-        renderStroke(drawCtx, activeStroke);
-      } else {
-        activeStroke.points.push({ x, y });
-        if (currentTool === 'eraser') {
-          renderStroke(mainCtx, {
-            type: 'eraser',
-            size: activeStroke.size,
-            points: [activeStroke.points[activeStroke.points.length - 2], { x, y }]
-          });
-        } else {
-          drawCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-          renderStroke(drawCtx, activeStroke);
-        }
-      }
-    });
-
-    container.addEventListener('pointerdown', (e) => {
-      closeAllPopups();
-      const x = e.clientX;
-      const y = e.clientY;
-      const now = Date.now();
-
-      // ========================================================
-      // DOUBLE-TAP GESTURE: PASTE AT TOUCHED LOCATION
-      // ========================================================
-      if (now - lastTapTime < 320 && Math.hypot(x - lastTapPos.x, y - lastTapPos.y) < 30) {
-        lastTapTime = 0;
-        if (clipboardData) {
-          pasteAtLocation(x, y);
-          return;
-        }
-      }
-      lastTapTime = now;
-      lastTapPos = { x, y };
-
-      // ========================================================
-      // SELECT TOOL INTERACTIONS
-      // ========================================================
-      if (currentTool === 'select') {
-        // 1. If clicking inside existing active selection box -> Start Dragging
-        if (selectionBox && x >= selectionBox.x && x <= selectionBox.x + selectionBox.w &&
-            y >= selectionBox.y && y <= selectionBox.y + selectionBox.h) {
-          isMovingSelection = true;
-          moveStartPos = { x, y };
-          return;
-        }
-
-        // 2. Direct Tap Selection: If user simply taps on any written stroke, auto-select it!
-        const page = pages[currentPageIndex];
-        let tappedStroke = null;
-        for (let i = page.strokes.length - 1; i >= 0; i--) {
-          const s = page.strokes[i];
-          const b = getStrokeBounds(s);
-          if (b && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
-            tappedStroke = s;
-            selectionBox = { ...b };
-            selectedStrokes = [s];
-            break;
-          }
-        }
-
-        if (tappedStroke) {
-          isMovingSelection = true;
-          moveStartPos = { x, y };
-          drawSelectionMarquee();
-          return;
-        }
-
-        // 3. Check Images
-        if (selectedImageIndex !== -1) {
-          const selImg = page.images[selectedImageIndex];
-          if (selImg && Math.hypot(x - (selImg.x + selImg.w), y - selImg.y) <= 18) {
-            page.images.splice(selectedImageIndex, 1);
-            selectedImageIndex = -1;
-            renderImages();
+          if (tappedStroke) {
+            isMovingSelection = true;
+            moveStartPos = { x, y };
+            drawSelectionMarquee();
             return;
           }
-          if (selImg && Math.hypot(x - (selImg.x + selImg.w), y - (selImg.y + selImg.h)) <= 18) {
-            imgDragState = {
-              mode: 'resize',
-              startX: x, startY: y,
-              origW: selImg.w, origH: selImg.h
-            };
+
+          // 3. Image Selection / Direct Tap
+          if (selectedImageIndex !== -1) {
+            const selImg = page.images[selectedImageIndex];
+            if (selImg && Math.hypot(x - (selImg.x + selImg.w), y - selImg.y) <= 18) {
+              page.images.splice(selectedImageIndex, 1);
+              selectedImageIndex = -1;
+              renderPageImages(pageIdx);
+              return;
+            }
+            if (selImg && Math.hypot(x - (selImg.x + selImg.w), y - (selImg.y + selImg.h)) <= 18) {
+              imgDragState = { mode: 'resize', startX: x, startY: y, origW: selImg.w, origH: selImg.h };
+              return;
+            }
+          }
+
+          let clickedImgIdx = -1;
+          for (let i = page.images.length - 1; i >= 0; i--) {
+            const img = page.images[i];
+            if (x >= img.x && x <= img.x + img.w && y >= img.y && y <= img.y + img.h) {
+              clickedImgIdx = i;
+              break;
+            }
+          }
+
+          if (clickedImgIdx !== -1) {
+            clearSelection();
+            selectedImageIndex = clickedImgIdx;
+            const img = page.images[clickedImgIdx];
+            imgDragState = { mode: 'move', startX: x, startY: y, origX: img.x, origY: img.y };
+            renderPageImages(pageIdx);
             return;
           }
-        }
 
-        let clickedImgIdx = -1;
-        for (let i = page.images.length - 1; i >= 0; i--) {
-          const img = page.images[i];
-          if (x >= img.x && x <= img.x + img.w && y >= img.y && y <= img.y + img.h) {
-            clickedImgIdx = i;
-            break;
-          }
-        }
-
-        if (clickedImgIdx !== -1) {
+          // 4. Start Area Selection (Lasso vs Box)
           clearSelection();
-          selectedImageIndex = clickedImgIdx;
-          const img = page.images[clickedImgIdx];
-          imgDragState = {
-            mode: 'move',
-            startX: x, startY: y,
-            origX: img.x, origY: img.y
-          };
-          renderImages();
+          isSelectingArea = true;
+          activeStroke = { startX: x, startY: y };
+          if (selectMode === 'lasso') {
+            lassoPoints = [{ x, y }];
+          } else {
+            selectionBox = { x, y, w: 0, h: 0 };
+          }
           return;
         }
 
-        // 4. Start Marquee Area Drag
-        clearSelection();
-        isSelectingArea = true;
-        activeStroke = { startX: x, startY: y };
-        selectionBox = { x, y, w: 0, h: 0 };
-        return;
-      }
+        // DRAWING TOOLS
+        isDrawing = true;
+        if (currentTool === 'laser') return;
 
-      // Drawing Tools
-      isDrawing = true;
-      if (currentTool === 'laser') return;
+        if (currentTool === 'eraser' && eraserMode === 'object') {
+          eraseStrokesAtPoint(pageIdx, x, y, brushSize / 2);
+          return;
+        }
 
-      if (currentTool === 'eraser' && eraserMode === 'object') {
-        eraseStrokesAtPoint(x, y, brushSize / 2);
-        return;
-      }
+        if (currentTool === 'shape') {
+          activeStroke = {
+            type: 'shape',
+            shape: currentShape,
+            color: currentColor,
+            size: brushSize,
+            startX: x, startY: y, endX: x, endY: y
+          };
+        } else {
+          const dynamicSize = (currentTool === 'highlighter') ? Math.max(brushSize * 2.5, 24) : brushSize;
+          activeStroke = {
+            type: currentTool,
+            color: currentColor,
+            size: dynamicSize,
+            points: [{ x, y }]
+          };
+        }
 
-      if (currentTool === 'shape') {
-        activeStroke = {
-          type: 'shape',
-          shape: currentShape,
-          color: currentColor,
-          size: brushSize,
-          startX: x, startY: y, endX: x, endY: y
-        };
-      } else {
-        const dynamicSize = (currentTool === 'highlighter') ? Math.max(brushSize * 2.5, 24) : brushSize;
-        activeStroke = {
-          type: currentTool,
-          color: currentColor,
-          size: dynamicSize,
-          points: [{ x, y }]
-        };
-      }
+        const pElem = pageElements[pageIdx];
+        if (currentTool !== 'eraser') {
+          const ctx = pElem.drawC.getContext('2d');
+          ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+          renderStroke(ctx, activeStroke);
+        } else {
+          renderStroke(pElem.mainC.getContext('2d'), activeStroke);
+        }
+      });
 
-      if (currentTool !== 'eraser') {
-        drawCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-        renderStroke(drawCtx, activeStroke);
-      } else {
-        renderStroke(mainCtx, activeStroke);
-      }
-    });
+      container.addEventListener('pointermove', (e) => {
+        if (isTwoFingerScroll) return;
+        updatePenPointer(e.clientX, e.clientY);
+
+        const rect = container.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        if (currentTool === 'select') {
+          if (isSelectingArea) {
+            if (selectMode === 'lasso') {
+              lassoPoints.push({ x, y });
+              drawSelectionMarquee();
+            } else {
+              const sx = Math.min(activeStroke.startX, x);
+              const sy = Math.min(activeStroke.startY, y);
+              const sw = Math.abs(x - activeStroke.startX);
+              const sh = Math.abs(y - activeStroke.startY);
+              selectionBox = { x: sx, y: sy, w: sw, h: sh };
+              drawSelectionMarquee();
+            }
+            return;
+          }
+
+          // Live Moving Selected Content (Strokes + Images)
+          if (isMovingSelection && selectionBox) {
+            const dx = x - moveStartPos.x;
+            const dy = y - moveStartPos.y;
+            selectionBox.x += dx;
+            selectionBox.y += dy;
+
+            if (lassoPoints.length > 0) {
+              lassoPoints.forEach(pt => { pt.x += dx; pt.y += dy; });
+            }
+
+            // Move strokes
+            selectedStrokes.forEach(s => {
+              if (s.points) {
+                s.points.forEach(pt => { pt.x += dx; pt.y += dy; });
+              } else if (s.type === 'shape') {
+                s.startX += dx; s.startY += dy; s.endX += dx; s.endY += dy;
+              }
+            });
+
+            // Move images
+            selectedImages.forEach(img => {
+              img.x += dx;
+              img.y += dy;
+            });
+
+            moveStartPos = { x, y };
+            drawSelectionMarquee();
+            redrawPageStrokes(pageIdx);
+            renderPageImages(pageIdx);
+            return;
+          }
+
+          if (imgDragState) {
+            e.preventDefault();
+            const page = pages[pageIdx];
+            const img = page.images[selectedImageIndex];
+            if (!img) return;
+
+            const dx = x - imgDragState.startX;
+            const dy = y - imgDragState.startY;
+
+            if (imgDragState.mode === 'move') {
+              img.x = imgDragState.origX + dx;
+              img.y = imgDragState.origY + dy;
+            } else if (imgDragState.mode === 'resize') {
+              const newW = Math.max(60, imgDragState.origW + dx);
+              const ratio = imgDragState.origH / imgDragState.origW;
+              img.w = newW;
+              img.h = newW * ratio;
+            }
+            renderPageImages(pageIdx);
+            return;
+          }
+          return;
+        }
+
+        if (!isDrawing) return;
+        e.preventDefault();
+        const pElem = pageElements[pageIdx];
+
+        if (currentTool === 'laser') {
+          const ctx = pElem.drawC.getContext('2d');
+          ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+          ctx.beginPath();
+          ctx.arc(x, y, 6, 0, Math.PI * 2);
+          ctx.fillStyle = '#ef4444';
+          ctx.shadowColor = '#ef4444';
+          ctx.shadowBlur = 10;
+          ctx.fill();
+          return;
+        }
+
+        if (currentTool === 'eraser' && eraserMode === 'object') {
+          eraseStrokesAtPoint(pageIdx, x, y, brushSize / 2);
+          return;
+        }
+
+        if (currentTool === 'shape') {
+          activeStroke.endX = x;
+          activeStroke.endY = y;
+          const ctx = pElem.drawC.getContext('2d');
+          ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+          renderStroke(ctx, activeStroke);
+        } else {
+          activeStroke.points.push({ x, y });
+          if (currentTool === 'eraser') {
+            renderStroke(pElem.mainC.getContext('2d'), {
+              type: 'eraser',
+              size: activeStroke.size,
+              points: [activeStroke.points[activeStroke.points.length - 2], { x, y }]
+            });
+          } else {
+            const ctx = pElem.drawC.getContext('2d');
+            ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+            renderStroke(ctx, activeStroke);
+          }
+        }
+      });
+    }
 
     function finishAction() {
       if (currentTool === 'select') {
         if (isSelectingArea) {
           isSelectingArea = false;
-          if (selectionBox && (selectionBox.w < 12 || selectionBox.h < 12)) {
-            clearSelection();
-          } else if (selectionBox) {
-            // Find all strokes that fall inside this drawn selection box
-            const minX = selectionBox.x;
-            const maxX = selectionBox.x + selectionBox.w;
-            const minY = selectionBox.y;
-            const maxY = selectionBox.y + selectionBox.h;
+          const page = pages[activeSelectionPageIndex];
 
-            const page = pages[currentPageIndex];
-            selectedStrokes = page.strokes.filter(s => {
-              if (s.points) {
-                return s.points.some(pt => pt.x >= minX && pt.x <= maxX && pt.y >= minY && pt.y <= maxY);
-              } else if (s.type === 'shape') {
-                return Math.min(s.startX, s.endX) < maxX && Math.max(s.startX, s.endX) > minX &&
-                       Math.min(s.startY, s.endY) < maxY && Math.max(s.startY, s.endY) > minY;
+          if (selectMode === 'lasso') {
+            if (lassoPoints.length > 2) {
+              // Strictly auto close loop
+              lassoPoints.push({ x: lassoPoints[0].x, y: lassoPoints[0].y });
+
+              let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+              lassoPoints.forEach(pt => {
+                if (pt.x < minX) minX = pt.x;
+                if (pt.x > maxX) maxX = pt.x;
+                if (pt.y < minY) minY = pt.y;
+                if (pt.y > maxY) maxY = pt.y;
+              });
+
+              // STRICT SELECTION: 90%+ points of the stroke MUST be strictly inside lasso loop
+              selectedStrokes = page.strokes.filter(s => {
+                if (s.points && s.points.length > 0) {
+                  let insideCount = 0;
+                  for (let i = 0; i < s.points.length; i++) {
+                    if (isPointInPolygon(s.points[i], lassoPoints)) insideCount++;
+                  }
+                  return (insideCount / s.points.length) >= 0.90;
+                } else if (s.type === 'shape') {
+                  return isPointInPolygon({ x: s.startX, y: s.startY }, lassoPoints) &&
+                         isPointInPolygon({ x: s.endX, y: s.endY }, lassoPoints);
+                }
+                return false;
+              });
+
+              // Also select images strictly inside loop
+              selectedImages = page.images.filter(img => {
+                const corners = [
+                  { x: img.x, y: img.y },
+                  { x: img.x + img.w, y: img.y },
+                  { x: img.x, y: img.y + img.h },
+                  { x: img.x + img.w, y: img.y + img.h }
+                ];
+                return corners.every(c => isPointInPolygon(c, lassoPoints));
+              });
+
+              if (selectedStrokes.length > 0 || selectedImages.length > 0 || (maxX - minX > 24 && maxY - minY > 24)) {
+                selectionBox = { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+                drawSelectionMarquee();
+              } else {
+                clearSelection();
               }
-              return false;
-            });
+            } else {
+              clearSelection();
+            }
+          } else {
+            // Box selection
+            if (selectionBox && (selectionBox.w < 12 || selectionBox.h < 12)) {
+              clearSelection();
+            } else if (selectionBox) {
+              const minX = selectionBox.x, maxX = selectionBox.x + selectionBox.w;
+              const minY = selectionBox.y, maxY = selectionBox.y + selectionBox.h;
+              selectedStrokes = page.strokes.filter(s => {
+                if (s.points) {
+                  return s.points.some(pt => pt.x >= minX && pt.x <= maxX && pt.y >= minY && pt.y <= maxY);
+                } else if (s.type === 'shape') {
+                  return Math.min(s.startX, s.endX) < maxX && Math.max(s.startX, s.endX) > minX &&
+                         Math.min(s.startY, s.endY) < maxY && Math.max(s.startY, s.endY) > minY;
+                }
+                return false;
+              });
+
+              selectedImages = page.images.filter(img => {
+                return (img.x >= minX && img.x + img.w <= maxX && img.y >= minY && img.y + img.h <= maxY);
+              });
+            }
           }
         }
-        if (isMovingSelection) {
-          isMovingSelection = false;
-        }
-        if (imgDragState) {
-          imgDragState = null;
-        }
+        if (isMovingSelection) isMovingSelection = false;
+        if (imgDragState) imgDragState = null;
         return;
       }
 
-      if (currentTool === 'laser') drawCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      if (currentTool === 'laser') {
+        pageElements.forEach(p => p.drawC.getContext('2d').clearRect(0, 0, window.innerWidth, window.innerHeight));
+      }
       if (!isDrawing) return;
       isDrawing = false;
 
@@ -1057,48 +1254,57 @@
         pages[currentPageIndex].strokes.push(activeStroke);
         pages[currentPageIndex].redoStack = [];
 
-        renderStroke(mainCtx, activeStroke);
-        drawCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+        const pElem = pageElements[currentPageIndex];
+        renderStroke(pElem.mainC.getContext('2d'), activeStroke);
+        pElem.drawC.getContext('2d').clearRect(0, 0, window.innerWidth, window.innerHeight);
       }
       activeStroke = null;
     }
 
-    container.addEventListener('pointerup', finishAction);
-    container.addEventListener('pointercancel', finishAction);
-    container.addEventListener('pointerleave', () => {
-      penPointer.style.display = 'none';
-      finishAction();
+    window.addEventListener('pointerup', finishAction);
+    window.addEventListener('pointercancel', finishAction);
+
+    scroller.addEventListener('scroll', () => {
+      if (selectionBox) drawSelectionMarquee();
+      const st = scroller.scrollTop;
+      const h = window.innerHeight;
+      const pageIdx = Math.round(st / h);
+      if (pageIdx !== currentPageIndex && pageIdx < pages.length) {
+        currentPageIndex = pageIdx;
+        updatePageIndicator();
+      }
     });
 
-    // Copy Button Handler
+    // Copy Handler: Copies both Strokes AND Images strictly inside selection
     document.getElementById('act-copy').onclick = () => {
       if (!selectionBox || selectionBox.w <= 0 || selectionBox.h <= 0) return;
-      const minX = selectionBox.x;
-      const maxX = selectionBox.x + selectionBox.w;
-      const minY = selectionBox.y;
-      const maxY = selectionBox.y + selectionBox.h;
 
-      const page = pages[currentPageIndex];
-      const copiedStrokes = [];
-
-      page.strokes.forEach(s => {
-        if (s.points && s.points.length > 0) {
-          const inside = s.points.some(pt => pt.x >= minX && pt.x <= maxX && pt.y >= minY && pt.y <= maxY);
-          if (inside) {
-            copiedStrokes.push({
-              type: s.type,
-              color: s.color,
-              size: s.size,
-              points: s.points.map(pt => ({ x: pt.x, y: pt.y }))
-            });
-          }
-        } else if (s.type === 'shape') {
-          copiedStrokes.push({ ...s });
+      const copiedStrokes = selectedStrokes.map(s => {
+        if (s.points) {
+          return {
+            type: s.type,
+            color: s.color,
+            size: s.size,
+            points: s.points.map(pt => ({ x: pt.x, y: pt.y }))
+          };
+        } else {
+          return { ...s };
         }
+      });
+
+      const copiedImages = selectedImages.map(img => {
+        return {
+          element: img.element,
+          x: img.x,
+          y: img.y,
+          w: img.w,
+          h: img.h
+        };
       });
 
       clipboardData = {
         strokes: copiedStrokes,
+        images: copiedImages,
         bounds: { ...selectionBox }
       };
 
@@ -1107,76 +1313,168 @@
       setTimeout(() => { copyBtn.textContent = '📋 Copy'; }, 1600);
     };
 
-    // Paste Button Handler
+    // Paste Handler
     document.getElementById('act-paste').onclick = () => {
-      if (!clipboardData) {
-        alert('Please select an area and copy first!');
-        return;
-      }
+      if (!clipboardData) return alert('Select and copy first!');
       const targetX = selectionBox ? selectionBox.x + 30 : 100;
       const targetY = selectionBox ? selectionBox.y + 30 : 100;
-      pasteAtLocation(targetX, targetY);
+      pasteAtLocation(activeSelectionPageIndex, targetX, targetY);
     };
 
-    // Delete Button Handler
+    // Delete Handler
     document.getElementById('act-del').onclick = () => {
       if (!selectionBox) return;
-      const minX = selectionBox.x;
-      const maxX = selectionBox.x + selectionBox.w;
-      const minY = selectionBox.y;
-      const maxY = selectionBox.y + selectionBox.h;
-
-      const page = pages[currentPageIndex];
-      page.strokes = page.strokes.filter(stroke => {
-        if (!stroke.points || stroke.points.length === 0) return true;
-        const inside = stroke.points.some(pt => pt.x >= minX && pt.x <= maxX && pt.y >= minY && pt.y <= maxY);
-        return !inside;
-      });
-
+      const page = pages[activeSelectionPageIndex];
+      page.strokes = page.strokes.filter(s => !selectedStrokes.includes(s));
+      page.images = page.images.filter(img => !selectedImages.includes(img));
       clearSelection();
-      redrawStrokes();
+      redrawPageStrokes(activeSelectionPageIndex);
+      renderPageImages(activeSelectionPageIndex);
     };
 
-    document.getElementById('act-close').onclick = () => {
-      clearSelection();
+    document.getElementById('act-close').onclick = () => clearSelection();
+
+    // Select Tool Mode (Lasso vs Box)
+    const selectBtn = document.getElementById('tool-select');
+    const selectPopup = document.getElementById('select-popup');
+    const optLasso = document.getElementById('opt-select-lasso');
+    const optBox = document.getElementById('opt-select-box');
+
+    optLasso.onclick = () => {
+      selectMode = 'lasso';
+      optLasso.classList.add('selected');
+      optBox.classList.remove('selected');
+      selectBtn.textContent = '✂️ Lasso ▾';
+      selectPopup.classList.remove('show');
+    };
+
+    optBox.onclick = () => {
+      selectMode = 'box';
+      optBox.classList.add('selected');
+      optLasso.classList.remove('selected');
+      selectBtn.textContent = '✂️ Box ▾';
+      selectPopup.classList.remove('show');
+    };
+
+    // Project File Management
+    const fileMenuBtn = document.getElementById('file-menu-btn');
+    const filePopup = document.getElementById('file-popup');
+    const projectFileInput = document.getElementById('project-file-input');
+
+    fileMenuBtn.onclick = (e) => {
+      e.stopPropagation();
+      const isShown = filePopup.classList.contains('show');
+      closeAllPopups();
+      if (!isShown) {
+        positionPopup(filePopup, fileMenuBtn, false);
+        filePopup.classList.add('show');
+      }
+    };
+
+    document.getElementById('opt-save-project').onclick = () => {
+      closeAllPopups();
+      const serializedPages = pages.map(p => {
+        const serializedImages = p.images.map(img => {
+          let base64 = '';
+          if (img.element && img.element.src) base64 = img.element.src;
+          return { x: img.x, y: img.y, w: img.w, h: img.h, src: base64 };
+        });
+        return { strokes: p.strokes, images: serializedImages };
+      });
+
+      const projectData = {
+        app: 'CanvasPadPro',
+        version: '2.0',
+        timestamp: new Date().toISOString(),
+        bgMode: bgMode,
+        pages: serializedPages
+      };
+
+      const blob = new Blob([JSON.stringify(projectData)], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.download = `MyWhiteboard-${new Date().toISOString().slice(0,10)}.canvaspad`;
+      link.href = URL.createObjectURL(blob);
+      link.click();
+    };
+
+    document.getElementById('opt-open-project').onclick = () => {
+      closeAllPopups();
+      projectFileInput.click();
+    };
+
+    projectFileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const data = JSON.parse(event.target.result);
+          if (!data.pages || !Array.isArray(data.pages)) {
+            alert('Invalid file format!');
+            return;
+          }
+          bgMode = data.bgMode || 'ruled';
+          bgBtn.textContent = bgMode.charAt(0).toUpperCase() + bgMode.slice(1);
+
+          pages = data.pages.map(p => {
+            const restoredImages = (p.images || []).map(imgData => {
+              const img = new Image();
+              img.src = imgData.src;
+              return { element: img, x: imgData.x, y: imgData.y, w: imgData.w, h: imgData.h };
+            });
+            return {
+              strokes: p.strokes || [],
+              images: restoredImages,
+              redoStack: []
+            };
+          });
+
+          currentPageIndex = 0;
+          setupDOMPages();
+          scroller.scrollTo({ top: 0, behavior: 'smooth' });
+          alert('Project loaded successfully!');
+        } catch(err) {
+          alert('Error opening project file!');
+        }
+      };
+      reader.readAsText(file);
+      projectFileInput.value = '';
+    });
+
+    document.getElementById('opt-new-project').onclick = () => {
+      closeAllPopups();
+      if (confirm('Start a new whiteboard? Any unsaved work will be lost.')) {
+        pages = [ { strokes: [], images: [], redoStack: [] } ];
+        currentPageIndex = 0;
+        setupDOMPages();
+        scroller.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     };
 
     // Draggable Toolbars
     function makeElementDraggable(elm, handleSelector) {
-      let isDragging = false;
-      let startX, startY, origLeft, origTop;
+      let isDragging = false, startX, startY, origLeft, origTop;
       const targetHandle = handleSelector ? elm.querySelector(handleSelector) : elm;
       if (!targetHandle) return;
 
       targetHandle.addEventListener('pointerdown', (e) => {
         isDragging = true;
-        startX = e.clientX;
-        startY = e.clientY;
-
+        startX = e.clientX; startY = e.clientY;
         const rect = elm.getBoundingClientRect();
-        origLeft = rect.left;
-        origTop = rect.top;
-
+        origLeft = rect.left; origTop = rect.top;
         elm.style.transform = 'none';
-        elm.style.right = 'auto';
-        elm.style.bottom = 'auto';
-        elm.style.left = origLeft + 'px';
-        elm.style.top = origTop + 'px';
-
+        elm.style.right = 'auto'; elm.style.bottom = 'auto';
+        elm.style.left = origLeft + 'px'; elm.style.top = origTop + 'px';
         targetHandle.setPointerCapture(e.pointerId);
         e.stopPropagation();
       });
 
       targetHandle.addEventListener('pointermove', (e) => {
         if (!isDragging) return;
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-
+        const dx = e.clientX - startX; const dy = e.clientY - startY;
         let newX = Math.max(8, Math.min(window.innerWidth - elm.offsetWidth - 8, origLeft + dx));
         let newY = Math.max(8, Math.min(window.innerHeight - elm.offsetHeight - 8, origTop + dy));
-
-        elm.style.left = newX + 'px';
-        elm.style.top = newY + 'px';
+        elm.style.left = newX + 'px'; elm.style.top = newY + 'px';
         e.stopPropagation();
       });
 
@@ -1186,7 +1484,6 @@
           try { targetHandle.releasePointerCapture(e.pointerId); } catch(err){}
         }
       };
-
       targetHandle.addEventListener('pointerup', stopDrag);
       targetHandle.addEventListener('pointercancel', stopDrag);
     }
@@ -1196,7 +1493,6 @@
 
     const toggleUiBtn = document.getElementById('toggle-ui-btn');
     let isUiHidden = false;
-
     toggleUiBtn.onclick = (e) => {
       e.stopPropagation();
       isUiHidden = !isUiHidden;
@@ -1204,7 +1500,6 @@
       toggleUiBtn.textContent = isUiHidden ? '👁‍🗨' : '👁';
     };
 
-    const selectBtn = document.getElementById('tool-select');
     const penBtn = document.getElementById('tool-pen');
     const highBtn = document.getElementById('tool-highlighter');
     const eraserBtn = document.getElementById('tool-eraser');
@@ -1227,10 +1522,8 @@
       let top = preferTop ? (rect.top - popupHeight - 12) : (rect.bottom + 10);
       if (top < 10) top = rect.bottom + 10;
       if (top + popupHeight > window.innerHeight) top = rect.top - popupHeight - 12;
-
       let left = rect.left - 10;
       if (left + 230 > window.innerWidth) left = window.innerWidth - 240;
-
       popup.style.top = top + 'px';
       popup.style.left = Math.max(10, left) + 'px';
     }
@@ -1241,6 +1534,8 @@
       exportPopup.classList.remove('show');
       colorPopup.classList.remove('show');
       sizePopup.classList.remove('show');
+      filePopup.classList.remove('show');
+      selectPopup.classList.remove('show');
     }
 
     function setActiveTool(tool) {
@@ -1256,12 +1551,24 @@
       if (tool !== 'select') {
         selectedImageIndex = -1;
         clearSelection();
-        renderImages();
+        renderPageImages(currentPageIndex);
       }
       closeAllPopups();
     }
 
-    selectBtn.onclick = () => setActiveTool('select');
+    selectBtn.onclick = () => {
+      if (currentTool === 'select') {
+        const isShown = selectPopup.classList.contains('show');
+        closeAllPopups();
+        if (!isShown) {
+          positionPopup(selectPopup, selectBtn, true);
+          selectPopup.classList.add('show');
+        }
+      } else {
+        setActiveTool('select');
+      }
+    };
+
     penBtn.onclick = () => setActiveTool('pen');
     highBtn.onclick = () => setActiveTool('highlighter');
     laserBtn.onclick = () => setActiveTool('laser');
@@ -1392,35 +1699,27 @@
 
     const importImgBtn = document.getElementById('import-img-btn');
     const imageInput = document.getElementById('image-input');
-
     importImgBtn.onclick = () => imageInput.click();
 
     imageInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-
       const reader = new FileReader();
       reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
           const maxW = window.innerWidth * 0.6;
           const maxH = window.innerHeight * 0.6;
-          let w = img.width;
-          let h = img.height;
-
+          let w = img.width, h = img.height;
           if (w > maxW) { h = (maxW / w) * h; w = maxW; }
           if (h > maxH) { w = (maxH / h) * w; h = maxH; }
-
           const x = (window.innerWidth - w) / 2;
           const y = (window.innerHeight - h) / 2;
 
-          pages[currentPageIndex].images.push({
-            element: img,
-            x: x, y: y, w: w, h: h
-          });
+          pages[currentPageIndex].images.push({ element: img, x, y, w, h });
           selectedImageIndex = pages[currentPageIndex].images.length - 1;
           setActiveTool('select');
-          renderImages();
+          renderPageImages(currentPageIndex);
         };
         img.src = event.target.result;
       };
@@ -1432,7 +1731,7 @@
       const page = pages[currentPageIndex];
       if (page.strokes.length > 0) {
         page.redoStack.push(page.strokes.pop());
-        redrawStrokes();
+        redrawPageStrokes(currentPageIndex);
       }
     };
 
@@ -1440,58 +1739,51 @@
       const page = pages[currentPageIndex];
       if (page.redoStack.length > 0) {
         page.strokes.push(page.redoStack.pop());
-        redrawStrokes();
+        redrawPageStrokes(currentPageIndex);
       }
     };
 
     document.getElementById('clear-btn').onclick = () => {
       pages[currentPageIndex].strokes = [];
       pages[currentPageIndex].redoStack = [];
-      redrawStrokes();
+      redrawPageStrokes(currentPageIndex);
     };
 
-    const pageNumText = document.getElementById('page-num');
     function updatePageIndicator() {
-      pageNumText.textContent = `${currentPageIndex + 1}/${pages.length}`;
+      document.getElementById('page-num').textContent = `${currentPageIndex + 1}/${pages.length}`;
     }
-
-    document.getElementById('add-page').onclick = () => {
-      pages.push({ strokes: [], images: [], redoStack: [] });
-      currentPageIndex = pages.length - 1;
-      selectedImageIndex = -1;
-      clearSelection();
-      updatePageIndicator();
-      redrawAll();
-    };
 
     document.getElementById('prev-page').onclick = () => {
       if (currentPageIndex > 0) {
         currentPageIndex--;
-        selectedImageIndex = -1;
-        clearSelection();
+        scroller.scrollTo({ top: currentPageIndex * window.innerHeight, behavior: 'smooth' });
         updatePageIndicator();
-        redrawAll();
       }
     };
 
     document.getElementById('next-page').onclick = () => {
       if (currentPageIndex < pages.length - 1) {
         currentPageIndex++;
-        selectedImageIndex = -1;
-        clearSelection();
+        scroller.scrollTo({ top: currentPageIndex * window.innerHeight, behavior: 'smooth' });
         updatePageIndicator();
-        redrawAll();
       }
+    };
+
+    document.getElementById('add-page').onclick = () => {
+      pages.push({ strokes: [], images: [], redoStack: [] });
+      setupDOMPages();
+      currentPageIndex = pages.length - 1;
+      scroller.scrollTo({ top: currentPageIndex * window.innerHeight, behavior: 'smooth' });
+      updatePageIndicator();
     };
 
     document.getElementById('del-page').onclick = () => {
       if (pages.length > 1) {
         pages.splice(currentPageIndex, 1);
         if (currentPageIndex >= pages.length) currentPageIndex = pages.length - 1;
-        selectedImageIndex = -1;
-        clearSelection();
+        setupDOMPages();
+        scroller.scrollTo({ top: currentPageIndex * window.innerHeight, behavior: 'smooth' });
         updatePageIndicator();
-        redrawAll();
       }
     };
 
@@ -1501,39 +1793,35 @@
       const nextIdx = (bgModes.indexOf(bgMode) + 1) % bgModes.length;
       bgMode = bgModes[nextIdx];
       bgBtn.textContent = bgMode.charAt(0).toUpperCase() + bgMode.slice(1);
-      
-      if (bgMode === 'dark' && currentColor === '#1e293b') {
-        applyColor('#ffffff');
-      } else if (bgMode !== 'dark' && currentColor === '#ffffff') {
-        applyColor('#1e293b');
-      }
 
-      renderBackground();
+      if (bgMode === 'dark' && currentColor === '#1e293b') applyColor('#ffffff');
+      else if (bgMode !== 'dark' && currentColor === '#ffffff') applyColor('#1e293b');
+
+      pageElements.forEach(p => renderBackground(p.bgC.getContext('2d')));
     };
 
-    function renderPageToCanvas(pageObj) {
+    function renderPageToCanvas(pageIdx) {
+      const pageObj = pages[pageIdx];
       const exportCanvas = document.createElement('canvas');
-      exportCanvas.width = mainCanvas.width;
-      exportCanvas.height = mainCanvas.height;
+      exportCanvas.width = window.innerWidth * (window.devicePixelRatio || 1);
+      exportCanvas.height = window.innerHeight * (window.devicePixelRatio || 1);
       const expCtx = exportCanvas.getContext('2d');
       const dpr = window.devicePixelRatio || 1;
-
       expCtx.scale(dpr, dpr);
-      renderBackground(expCtx, window.innerWidth, window.innerHeight);
 
+      renderBackground(expCtx, window.innerWidth, window.innerHeight);
       pageObj.images.forEach(imgItem => {
         if (imgItem.element && imgItem.element.complete) {
           expCtx.drawImage(imgItem.element, imgItem.x, imgItem.y, imgItem.w, imgItem.h);
         }
       });
-
       pageObj.strokes.forEach(s => renderStroke(expCtx, s));
       return exportCanvas;
     }
 
     document.getElementById('opt-export-png').onclick = () => {
-      exportPopup.classList.remove('show');
-      const canvasToSave = renderPageToCanvas(pages[currentPageIndex]);
+      closeAllPopups();
+      const canvasToSave = renderPageToCanvas(currentPageIndex);
       const link = document.createElement('a');
       link.download = `CanvasPad-Page-${currentPageIndex + 1}.png`;
       link.href = canvasToSave.toDataURL('image/png');
@@ -1541,12 +1829,10 @@
     };
 
     document.getElementById('opt-export-pdf').onclick = async () => {
-      exportPopup.classList.remove('show');
+      closeAllPopups();
       const { jsPDF } = window.jspdf;
-      
       const isLandscape = window.innerWidth > window.innerHeight;
       const orientation = isLandscape ? 'landscape' : 'portrait';
-      
       const pdf = new jsPDF({
         orientation: orientation,
         unit: 'px',
@@ -1555,16 +1841,15 @@
 
       for (let i = 0; i < pages.length; i++) {
         if (i > 0) pdf.addPage([window.innerWidth, window.innerHeight], orientation);
-        const renderedCanvas = renderPageToCanvas(pages[i]);
+        const renderedCanvas = renderPageToCanvas(i);
         const imgData = renderedCanvas.toDataURL('image/jpeg', 0.95);
         pdf.addImage(imgData, 'JPEG', 0, 0, window.innerWidth, window.innerHeight);
       }
-
-      pdf.save('CanvasPad-Notes.pdf');
+      pdf.save('CanvasPad-FullNotes.pdf');
     };
 
-    resize();
-    updatePageIndicator();
+    window.addEventListener('resize', () => setupDOMPages());
+    setupDOMPages();
   </script>
 </body>
 </html>
